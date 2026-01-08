@@ -209,6 +209,15 @@ class Product:
         cur.execute("DELETE FROM products WHERE m_number = ?", (m_number,))
         conn.commit()
         conn.close()
+    
+    @staticmethod
+    def clear_all():
+        """Delete all products."""
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM products")
+        conn.commit()
+        conn.close()
 
 
 if __name__ == "__main__":

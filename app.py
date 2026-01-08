@@ -183,11 +183,62 @@ HTML_TEMPLATE = '''
         
         <!-- Products Tab -->
         <div id="products-panel" class="panel active">
+            <!-- Template Downloads -->
+            <div class="card" style="margin-bottom: 20px;">
+                <h2>📥 Import Products</h2>
+                <p style="color: #666; font-size: 13px; margin-bottom: 15px;">
+                    Download templates, populate them, then drag & drop back here to import.
+                </p>
+                
+                <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
+                    <!-- CSV Template -->
+                    <div style="flex: 1; min-width: 250px; background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                        <h4 style="margin: 0 0 10px 0;">📋 Product Data Template</h4>
+                        <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                            CSV with M Number, Description, Size, Color, EAN columns
+                        </p>
+                        <button class="btn btn-primary" onclick="downloadProductTemplate()">⬇️ Download CSV Template</button>
+                    </div>
+                    
+                    <!-- SVG Template -->
+                    <div style="flex: 1; min-width: 250px; background: #f0f7ff; padding: 15px; border-radius: 8px;">
+                        <h4 style="margin: 0 0 10px 0;">🎨 Icon/Graphic Template</h4>
+                        <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                            100mm × 100mm SVG template for product graphics
+                        </p>
+                        <button class="btn btn-secondary" onclick="downloadSvgTemplate()">⬇️ Download SVG Template</button>
+                    </div>
+                </div>
+                
+                <!-- Drag & Drop Zone -->
+                <div id="drop-zone" 
+                     style="border: 2px dashed #ccc; border-radius: 8px; padding: 40px; text-align: center; background: #fafafa; cursor: pointer; transition: all 0.2s;"
+                     ondragover="handleDragOver(event)" 
+                     ondragleave="handleDragLeave(event)" 
+                     ondrop="handleFileDrop(event)"
+                     onclick="document.getElementById('file-input').click()">
+                    <div style="font-size: 48px; margin-bottom: 10px;">📁</div>
+                    <p style="font-size: 14px; color: #666; margin: 0;">
+                        <strong>Drag & drop files here</strong><br>
+                        <span style="font-size: 12px;">CSV (product data) or SVG (graphics) files</span>
+                    </p>
+                    <input type="file" id="file-input" accept=".csv,.svg" multiple style="display: none;" onchange="handleFileSelect(event)">
+                </div>
+                <div id="import-status" style="margin-top: 10px; font-size: 12px;"></div>
+                
+                <!-- SVG Preview Area -->
+                <div id="svg-preview-area" style="display: none; margin-top: 15px; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 15px;">
+                    <h4 style="margin: 0 0 10px 0;">🖼️ Imported Graphics Preview</h4>
+                    <div id="svg-previews" style="display: flex; gap: 10px; flex-wrap: wrap;"></div>
+                </div>
+            </div>
+            
             <div class="card">
                 <h2>Product List</h2>
                 <div style="margin-bottom: 15px;">
                     <button class="btn btn-primary" onclick="showAddProduct()">+ Add Product</button>
                     <button class="btn btn-secondary" onclick="loadProducts()">↻ Refresh</button>
+                    <button class="btn btn-danger" onclick="clearAllProducts()" style="margin-left: 10px;">🗑️ Clear All</button>
                 </div>
                 <table id="products-table">
                     <thead>
@@ -705,6 +756,159 @@ HTML_TEMPLATE = '''
             if (!confirm(`Delete ${mNumber}?`)) return;
             await fetch(`/api/products/${mNumber}`, {method: 'DELETE'});
             loadProducts();
+        }
+        
+        async function clearAllProducts() {
+            if (!confirm('Delete ALL products? This cannot be undone.')) return;
+            try {
+                await fetch('/api/products/clear', {method: 'DELETE'});
+                loadProducts();
+            } catch (e) {
+                alert('Error clearing products: ' + e.message);
+            }
+        }
+        
+        // ============ TEMPLATE DOWNLOAD & IMPORT FUNCTIONS ============
+        
+        function downloadProductTemplate() {
+            const csvContent = 'm_number,description,size,color,ean,icon_files,orientation\n' +
+                'M1001,Example Sign,saville,silver,5060000000001,icon.svg,landscape\n' +
+                'M1002,Example Sign,saville,gold,5060000000002,icon.svg,landscape\n' +
+                'M1003,Example Sign,saville,white,5060000000003,icon.svg,landscape\n';
+            
+            const blob = new Blob([csvContent], {type: 'text/csv'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'product_template.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        function downloadSvgTemplate() {
+            window.location.href = '/api/templates/svg';
+        }
+        
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('drop-zone').style.borderColor = '#007bff';
+            document.getElementById('drop-zone').style.background = '#e8f4ff';
+        }
+        
+        function handleDragLeave(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('drop-zone').style.borderColor = '#ccc';
+            document.getElementById('drop-zone').style.background = '#fafafa';
+        }
+        
+        function handleFileDrop(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleDragLeave(e);
+            
+            const files = e.dataTransfer.files;
+            processFiles(files);
+        }
+        
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            processFiles(files);
+        }
+        
+        async function processFiles(files) {
+            const status = document.getElementById('import-status');
+            status.innerHTML = '';
+            
+            for (const file of files) {
+                if (file.name.endsWith('.csv')) {
+                    await importCsvFile(file);
+                } else if (file.name.endsWith('.svg')) {
+                    await importSvgFile(file);
+                } else {
+                    status.innerHTML += `<span style="color: orange;">⚠️ Skipped: ${file.name} (not CSV or SVG)</span><br>`;
+                }
+            }
+        }
+        
+        async function importCsvFile(file) {
+            const status = document.getElementById('import-status');
+            status.innerHTML += `<span style="color: #0ff;">📋 Importing ${file.name}...</span><br>`;
+            
+            try {
+                const text = await file.text();
+                const lines = text.trim().split('\\n');
+                const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+                
+                let imported = 0;
+                for (let i = 1; i < lines.length; i++) {
+                    const values = lines[i].split(',').map(v => v.trim());
+                    if (values.length < 2) continue;
+                    
+                    const product = {};
+                    headers.forEach((h, idx) => {
+                        if (values[idx]) product[h] = values[idx];
+                    });
+                    
+                    if (!product.m_number) continue;
+                    
+                    // Create product via API
+                    await fetch('/api/products', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(product)
+                    });
+                    imported++;
+                }
+                
+                status.innerHTML += `<span style="color: #0f0;">✅ Imported ${imported} products from ${file.name}</span><br>`;
+                loadProducts();
+            } catch (e) {
+                status.innerHTML += `<span style="color: red;">❌ Error importing ${file.name}: ${e.message}</span><br>`;
+            }
+        }
+        
+        async function importSvgFile(file) {
+            const status = document.getElementById('import-status');
+            const previewArea = document.getElementById('svg-preview-area');
+            const previews = document.getElementById('svg-previews');
+            
+            status.innerHTML += `<span style="color: #0ff;">🎨 Importing ${file.name}...</span><br>`;
+            
+            try {
+                const svgContent = await file.text();
+                
+                // Upload SVG to server
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const resp = await fetch('/api/icons/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await resp.json();
+                
+                if (data.success) {
+                    status.innerHTML += `<span style="color: #0f0;">✅ Uploaded ${file.name} as ${data.filename}</span><br>`;
+                    
+                    // Show preview
+                    previewArea.style.display = 'block';
+                    const previewDiv = document.createElement('div');
+                    previewDiv.style.cssText = 'border: 1px solid #ddd; border-radius: 4px; padding: 10px; text-align: center; background: white;';
+                    previewDiv.innerHTML = `
+                        <div style="width: 80px; height: 80px; margin: 0 auto; overflow: hidden;">
+                            ${svgContent}
+                        </div>
+                        <p style="font-size: 11px; margin: 5px 0 0 0; color: #666;">${data.filename}</p>
+                    `;
+                    previews.appendChild(previewDiv);
+                } else {
+                    status.innerHTML += `<span style="color: red;">❌ Error: ${data.error}</span><br>`;
+                }
+            } catch (e) {
+                status.innerHTML += `<span style="color: red;">❌ Error importing ${file.name}: ${e.message}</span><br>`;
+            }
         }
         
         async function generateImages() {
@@ -2138,6 +2342,79 @@ def update_product(m_number):
 def delete_product(m_number):
     Product.delete(m_number)
     return jsonify({"success": True})
+
+
+@app.route('/api/products/clear', methods=['DELETE'])
+def clear_all_products():
+    """Delete all products."""
+    Product.clear_all()
+    return jsonify({"success": True})
+
+
+@app.route('/api/templates/svg')
+def download_svg_template():
+    """Download a 100mm x 100mm SVG template for product graphics."""
+    svg_content = '''<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" 
+     width="100mm" height="100mm" 
+     viewBox="0 0 100 100">
+  <!-- 100mm x 100mm template for product icon/graphic -->
+  <!-- Design your icon within this area -->
+  
+  <!-- Guide rectangle (remove before use) -->
+  <rect x="0" y="0" width="100" height="100" 
+        fill="none" stroke="#ccc" stroke-width="0.5" stroke-dasharray="2,2"/>
+  
+  <!-- Center crosshair (remove before use) -->
+  <line x1="50" y1="0" x2="50" y2="100" stroke="#eee" stroke-width="0.25"/>
+  <line x1="0" y1="50" x2="100" y2="50" stroke="#eee" stroke-width="0.25"/>
+  
+  <!-- Example icon placeholder - replace with your design -->
+  <circle cx="50" cy="50" r="30" fill="none" stroke="#999" stroke-width="2"/>
+  <text x="50" y="55" text-anchor="middle" font-family="Arial" font-size="8" fill="#999">
+    Your Icon Here
+  </text>
+</svg>'''
+    
+    return Response(
+        svg_content,
+        mimetype='image/svg+xml',
+        headers={'Content-Disposition': 'attachment; filename=icon_template_100mm.svg'}
+    )
+
+
+@app.route('/api/icons/upload', methods=['POST'])
+def upload_icon():
+    """Upload an SVG icon file."""
+    if 'file' not in request.files:
+        return jsonify({"success": False, "error": "No file provided"}), 400
+    
+    file = request.files['file']
+    if not file.filename.endswith('.svg'):
+        return jsonify({"success": False, "error": "Only SVG files allowed"}), 400
+    
+    # Save to icons directory
+    icons_dir = Path(__file__).parent / "icons"
+    icons_dir.mkdir(exist_ok=True)
+    
+    # Use original filename or generate unique one
+    filename = file.filename
+    save_path = icons_dir / filename
+    
+    # If file exists, add number suffix
+    counter = 1
+    while save_path.exists():
+        name, ext = filename.rsplit('.', 1)
+        save_path = icons_dir / f"{name}_{counter}.{ext}"
+        counter += 1
+    
+    file.save(save_path)
+    
+    return jsonify({
+        "success": True,
+        "filename": save_path.name,
+        "path": str(save_path)
+    })
 
 
 @app.route('/api/preview/<m_number>')
