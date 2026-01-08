@@ -243,6 +243,7 @@ HTML_TEMPLATE = '''
                 <table id="products-table">
                     <thead>
                         <tr>
+                            <th style="width: 60px;">Preview</th>
                             <th>M Number</th>
                             <th>Description</th>
                             <th>Size</th>
@@ -555,6 +556,12 @@ HTML_TEMPLATE = '''
             const tbody = document.getElementById('products-tbody');
             tbody.innerHTML = products.map(p => `
                 <tr>
+                    <td style="text-align: center;">
+                        <img src="/api/preview/${p.m_number}?t=${Date.now()}" 
+                             alt="${p.m_number}" 
+                             style="width: 50px; height: 50px; object-fit: contain; border-radius: 4px; border: 1px solid #ddd; background: #f8f8f8;"
+                             onerror="this.style.display='none'">
+                    </td>
                     <td><strong>${p.m_number}</strong></td>
                     <td>${p.description || ''}</td>
                     <td>${p.size || ''}</td>
@@ -880,6 +887,23 @@ HTML_TEMPLATE = '''
                 
                 if (data.success) {
                     status.innerHTML += `<span style="color: #0f0;">✅ Uploaded ${file.name} as ${data.filename}</span><br>`;
+                    
+                    // Auto-apply to all products that don't have an icon set
+                    let appliedCount = 0;
+                    for (const product of products) {
+                        if (!product.icon_files) {
+                            await fetch(`/api/products/${product.m_number}`, {
+                                method: 'PATCH',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({icon_files: data.filename})
+                            });
+                            appliedCount++;
+                        }
+                    }
+                    if (appliedCount > 0) {
+                        status.innerHTML += `<span style="color: #0f0;">✅ Applied ${data.filename} to ${appliedCount} products</span><br>`;
+                        loadProducts(); // Refresh to show updated previews
+                    }
                     
                     // Show preview
                     previewArea.style.display = 'block';
