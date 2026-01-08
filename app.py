@@ -383,16 +383,46 @@ HTML_TEMPLATE = '''
         
         function renderQAGrid() {
             const grid = document.getElementById('qa-grid');
-            // Only show silver variants in QA (gold/white use same settings)
+            // Group products by size and description to show variants together
             const silverProducts = products.filter(p => p.color === 'silver');
             
-            grid.innerHTML = silverProducts.map(p => `
-                <div class="product-card">
-                    <img src="/api/preview/${p.m_number}?t=${Date.now()}" alt="${p.m_number}">
+            grid.innerHTML = silverProducts.map(p => {
+                // Find gold and white variants
+                const goldVariant = products.find(v => v.size === p.size && v.description === p.description && v.color === 'gold');
+                const whiteVariant = products.find(v => v.size === p.size && v.description === p.description && v.color === 'white');
+                
+                return `
+                <div class="product-card" style="max-width: 450px;">
+                    <div style="display: flex; gap: 5px; padding: 10px; background: #f0f0f0;">
+                        <div style="flex: 1; text-align: center;">
+                            <img src="/api/preview/${p.m_number}?t=${Date.now()}" alt="${p.m_number}" style="max-width: 100%; border-radius: 4px;">
+                            <div style="font-size: 10px; margin-top: 4px;">
+                                <strong>${p.m_number}</strong> (Silver)
+                                <button onclick="setQAStatus('${p.m_number}', 'rejected')" style="font-size: 9px; padding: 1px 4px; margin-left: 4px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 3px;">✗</button>
+                            </div>
+                        </div>
+                        ${goldVariant ? `
+                        <div style="flex: 1; text-align: center;">
+                            <img src="/api/preview/${goldVariant.m_number}?t=${Date.now()}" alt="${goldVariant.m_number}" style="max-width: 100%; border-radius: 4px;">
+                            <div style="font-size: 10px; margin-top: 4px;">
+                                <strong>${goldVariant.m_number}</strong> (Gold)
+                                <button onclick="setQAStatus('${goldVariant.m_number}', 'rejected')" style="font-size: 9px; padding: 1px 4px; margin-left: 4px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 3px;">✗</button>
+                            </div>
+                        </div>
+                        ` : ''}
+                        ${whiteVariant ? `
+                        <div style="flex: 1; text-align: center;">
+                            <img src="/api/preview/${whiteVariant.m_number}?t=${Date.now()}" alt="${whiteVariant.m_number}" style="max-width: 100%; border-radius: 4px;">
+                            <div style="font-size: 10px; margin-top: 4px;">
+                                <strong>${whiteVariant.m_number}</strong> (White)
+                                <button onclick="setQAStatus('${whiteVariant.m_number}', 'rejected')" style="font-size: 9px; padding: 1px 4px; margin-left: 4px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 3px;">✗</button>
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
                     <div class="product-card-body">
-                        <h3>${p.m_number}</h3>
-                        <p class="product-meta">${p.description || ''}</p>
-                        <p class="product-meta">${p.size} / ${p.color}</p>
+                        <h3>${p.description || p.m_number}</h3>
+                        <p class="product-meta">${p.size}</p>
                         
                         <div style="margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 6px;">
                             <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
@@ -422,13 +452,13 @@ HTML_TEMPLATE = '''
                             </div>
                         </div>
                         
-                        <div class="actions">
-                            <button class="btn btn-success" onclick="approveWithVariants('${p.m_number}')">✓ Approve All Colors</button>
-                            <button class="btn btn-danger" onclick="setQAStatus('${p.m_number}', 'rejected')">✗ Reject</button>
+                        <div class="actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button class="btn btn-success" onclick="approveWithVariants('${p.m_number}')">✓ Approve All</button>
+                            <button class="btn btn-secondary" onclick="regenerateVariants('${p.m_number}')" style="background: #6c757d;">🔄 Regenerate</button>
                         </div>
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
         }
         
         async function setQAStatus(mNumber, status) {
@@ -799,6 +829,45 @@ HTML_TEMPLATE = '''
                 loadQAProducts();
             } catch (e) {
                 console.error('Failed to approve variants:', e);
+            }
+        }
+        
+        async function regenerateVariants(mNumber) {
+            // Get the silver product's settings
+            const silverProduct = products.find(x => x.m_number === mNumber);
+            if (!silverProduct) return;
+            
+            const { icon_scale, icon_offset_x, icon_offset_y, size, description } = silverProduct;
+            
+            // Find gold and white variants
+            const variants = products.filter(p => 
+                p.size === size && 
+                p.description === description && 
+                (p.color === 'gold' || p.color === 'white')
+            );
+            
+            // Apply silver settings to all variants and refresh images
+            try {
+                for (const variant of variants) {
+                    await fetch(`/api/products/${variant.m_number}/scale`, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({icon_scale: icon_scale || 1.0})
+                    });
+                    await fetch(`/api/products/${variant.m_number}/position`, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({icon_offset_x: icon_offset_x || 0, icon_offset_y: icon_offset_y || 0})
+                    });
+                }
+                
+                // Refresh all variant images
+                refreshProductImage(mNumber);
+                for (const variant of variants) {
+                    refreshProductImage(variant.m_number);
+                }
+            } catch (e) {
+                console.error('Failed to regenerate variants:', e);
             }
         }
         
