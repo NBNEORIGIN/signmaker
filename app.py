@@ -245,6 +245,13 @@ HTML_TEMPLATE = '''
                     <button class="btn btn-warning" onclick="exportEtsy()">📥 Etsy Shop Uploader</button>
                 </div>
                 
+                <h3>eBay API Publishing</h3>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 20px;">
+                    <button class="btn btn-primary" onclick="publishToEbay(true)">🛒 Publish to eBay (with Ads)</button>
+                    <button class="btn btn-secondary" onclick="publishToEbay(false)">🛒 Publish to eBay (no Ads)</button>
+                    <span style="color: #888; font-size: 12px;">Creates listings via eBay API with auto-promotion</span>
+                </div>
+                
                 <h3>Image Downloads</h3>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                     <button class="btn btn-secondary" onclick="exportAllImages()">📦 Download All Images (ZIP)</button>
@@ -601,6 +608,31 @@ HTML_TEMPLATE = '''
             window.location.href = `/api/export/images/${mNumber}`;
         }
         
+        async function publishToEbay(withAds) {
+            const status = document.getElementById('export-status');
+            status.innerHTML = '<div class="alert alert-info">Publishing to eBay... This may take a minute.</div>';
+            
+            try {
+                const resp = await fetch(`/api/ebay/publish?promote=${withAds}`, {method: 'POST'});
+                const data = await resp.json();
+                
+                if (data.success) {
+                    let msg = `eBay listing created! ${data.products} products published.`;
+                    if (data.url) {
+                        msg += ` <a href="${data.url}" target="_blank">View on eBay</a>`;
+                    }
+                    if (data.promoted) {
+                        msg += ' (Auto-promoted with 5% ad rate)';
+                    }
+                    status.innerHTML = `<div class="alert alert-success">${msg}</div>`;
+                } else {
+                    status.innerHTML = `<div class="alert alert-error">Error: ${data.error}</div>`;
+                }
+            } catch (e) {
+                status.innerHTML = `<div class="alert alert-error">Error: ${e.message}</div>`;
+            }
+        }
+        
         // Load products on page load
         loadProducts();
     </script>
@@ -739,6 +771,52 @@ def generate_full():
     def stream():
         yield "Full pipeline not yet implemented in web version.\n"
     return Response(stream(), mimetype='text/plain')
+
+
+@app.route('/api/ebay/publish', methods=['POST'])
+def publish_to_ebay():
+    """Publish approved products to eBay via API with auto-promotion."""
+    from ebay_api import create_ebay_listing, load_policy_ids
+    
+    promote = request.args.get('promote', 'true').lower() == 'true'
+    ad_rate = request.args.get('ad_rate', '5.0')
+    dry_run = request.args.get('dry_run', 'false').lower() == 'true'
+    
+    products = Product.approved()
+    if not products:
+        products = Product.all()
+    
+    if not products:
+        return jsonify({"error": "No products to publish"}), 400
+    
+    try:
+        policy_ids = load_policy_ids()
+    except FileNotFoundError as e:
+        return jsonify({"error": str(e), "hint": "Run ebay_setup_policies.py first"}), 400
+    
+    try:
+        listing_id = create_ebay_listing(
+            products=products,
+            policy_ids=policy_ids,
+            promote=promote,
+            ad_rate=ad_rate,
+            dry_run=dry_run,
+        )
+        
+        if listing_id:
+            result = {
+                "success": True,
+                "listing_id": listing_id,
+                "products": len(products),
+                "promoted": promote and listing_id != "DRY_RUN",
+            }
+            if listing_id != "DRY_RUN":
+                result["url"] = f"https://www.ebay.co.uk/itm/{listing_id}"
+            return jsonify(result)
+        else:
+            return jsonify({"error": "Failed to create listing"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/export/flatfile', methods=['POST'])

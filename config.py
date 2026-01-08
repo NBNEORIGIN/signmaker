@@ -22,6 +22,13 @@ R2_PUBLIC_URL = os.environ.get("R2_PUBLIC_URL", "")
 # Flask
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
 
+# eBay API
+EBAY_CLIENT_ID = os.environ.get("EBAY_CLIENT_ID", "")
+EBAY_CLIENT_SECRET = os.environ.get("EBAY_CLIENT_SECRET", "")
+EBAY_RU_NAME = os.environ.get("EBAY_RU_NAME", "")
+EBAY_ENVIRONMENT = os.environ.get("EBAY_ENVIRONMENT", "production")
+EBAY_MERCHANT_LOCATION_KEY = os.environ.get("EBAY_MERCHANT_LOCATION_KEY", "default")
+
 # Product sizes (internal name -> dimensions in cm, Amazon size code)
 SIZES = {
     "dracula": {"dimensions": (9.5, 9.5), "code": "XS", "display": "9.5 x 9.5 cm"},
