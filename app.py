@@ -1616,21 +1616,37 @@ Use Cases: ${useCases}
                     throw new Error(`Amazon: ${amazonData.error}`);
                 }
                 
-                // Step 2b: eBay API (with ads)
-                exportLog('Publishing to eBay...');
-                progress.innerHTML += '🛒 eBay API...<br>';
-                const ebayResp = await fetch('/api/ebay/publish', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ with_ads: true })
-                });
-                const ebayData = await ebayResp.json();
-                if (ebayData.success) {
-                    progress.innerHTML += `✅ eBay: ${ebayData.count || 0} listings published<br>`;
-                    exportLog('eBay listings published', 'success');
-                } else {
-                    progress.innerHTML += `⚠️ eBay: ${ebayData.error || 'Check API setup'}<br>`;
-                    exportLog(`eBay warning: ${ebayData.error}`, 'error');
+                // Step 2b: eBay API (with ads) - with timeout handling
+                exportLog('Publishing to eBay (this may take a minute)...');
+                progress.innerHTML += '🛒 eBay API (may take up to 2 minutes)...<br>';
+                try {
+                    const ebayController = new AbortController();
+                    const ebayTimeout = setTimeout(() => ebayController.abort(), 120000); // 2 min timeout
+                    
+                    const ebayResp = await fetch('/api/ebay/publish', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ with_ads: true }),
+                        signal: ebayController.signal
+                    });
+                    clearTimeout(ebayTimeout);
+                    
+                    const ebayData = await ebayResp.json();
+                    if (ebayData.success) {
+                        progress.innerHTML += `✅ eBay: ${ebayData.count || 0} listings published<br>`;
+                        exportLog('eBay listings published', 'success');
+                    } else {
+                        progress.innerHTML += `⚠️ eBay: ${ebayData.error || 'Check API setup'}<br>`;
+                        exportLog(`eBay warning: ${ebayData.error}`, 'error');
+                    }
+                } catch (ebayErr) {
+                    if (ebayErr.name === 'AbortError') {
+                        progress.innerHTML += `⚠️ eBay: Request timed out (API may still be processing)<br>`;
+                        exportLog('eBay request timed out', 'error');
+                    } else {
+                        progress.innerHTML += `⚠️ eBay: ${ebayErr.message}<br>`;
+                        exportLog(`eBay error: ${ebayErr.message}`, 'error');
+                    }
                 }
                 
                 // Step 2c: Etsy Shop Uploader
@@ -2317,25 +2333,35 @@ def generate_full():
 @app.route('/api/ebay/publish', methods=['POST'])
 def publish_to_ebay():
     """Publish approved products to eBay via API with auto-promotion."""
-    from ebay_api import create_ebay_listing, load_policy_ids
+    import logging
     
-    promote = request.args.get('promote', 'true').lower() == 'true'
-    ad_rate = request.args.get('ad_rate', '5.0')
-    dry_run = request.args.get('dry_run', 'false').lower() == 'true'
+    data = request.json or {}
+    promote = data.get('with_ads', True)
+    ad_rate = data.get('ad_rate', '5.0')
+    dry_run = data.get('dry_run', False)
     
     products = Product.approved()
     if not products:
         products = Product.all()
     
     if not products:
-        return jsonify({"error": "No products to publish"}), 400
+        return jsonify({"success": False, "error": "No products to publish"}), 400
     
     try:
+        from ebay_api import create_ebay_listing, load_policy_ids
         policy_ids = load_policy_ids()
     except FileNotFoundError as e:
-        return jsonify({"error": str(e), "hint": "Run ebay_setup_policies.py first"}), 400
+        logging.warning(f"eBay policies not configured: {e}")
+        return jsonify({"success": False, "error": "eBay policies not configured. Run ebay_setup_policies.py first."}), 400
+    except ImportError as e:
+        logging.warning(f"eBay API module not available: {e}")
+        return jsonify({"success": False, "error": "eBay API module not available"}), 400
+    except Exception as e:
+        logging.error(f"Error loading eBay policies: {e}")
+        return jsonify({"success": False, "error": f"eBay setup error: {str(e)}"}), 400
     
     try:
+        logging.info(f"Publishing {len(products)} products to eBay (promote={promote})")
         listing_id = create_ebay_listing(
             products=products,
             policy_ids=policy_ids,
@@ -2348,16 +2374,18 @@ def publish_to_ebay():
             result = {
                 "success": True,
                 "listing_id": listing_id,
-                "products": len(products),
+                "count": len(products),
                 "promoted": promote and listing_id != "DRY_RUN",
             }
             if listing_id != "DRY_RUN":
                 result["url"] = f"https://www.ebay.co.uk/itm/{listing_id}"
+            logging.info(f"eBay listing created: {listing_id}")
             return jsonify(result)
         else:
-            return jsonify({"error": "Failed to create listing"}), 500
+            return jsonify({"success": False, "error": "Failed to create listing - no listing ID returned"}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logging.error(f"eBay publish error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/export/flatfile-preview')
