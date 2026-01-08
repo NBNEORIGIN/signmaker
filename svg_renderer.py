@@ -46,13 +46,13 @@ def _render_svg_impl(svg_content: str, scale: int, transparent: bool = False, fu
         temp_svg = Path(f.name)
     
     try:
-        page.goto(f'file:///{temp_svg.as_posix()}')
-        if full_page:
-            # Capture full page to include elements outside SVG viewBox
-            png_bytes = page.screenshot(type='png', omit_background=transparent, full_page=True)
-        else:
-            svg_element = page.locator('svg')
-            png_bytes = svg_element.screenshot(type='png', omit_background=transparent)
+        page.goto(f'file:///{temp_svg.as_posix()}', timeout=60000)
+        page.wait_for_load_state('networkidle', timeout=10000)
+        
+        # Always use SVG element screenshot - full_page causes timeouts
+        # For peel_and_stick, the SVG should contain all elements within its bounds
+        svg_element = page.locator('svg')
+        png_bytes = svg_element.screenshot(type='png', omit_background=transparent, timeout=60000)
     finally:
         page.close()
         context.close()

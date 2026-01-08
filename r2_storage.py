@@ -20,6 +20,7 @@ def get_r2_client():
         endpoint_url=f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
         aws_access_key_id=R2_ACCESS_KEY_ID,
         aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+        region_name="auto",  # R2 requires 'auto' as region
         config=Config(signature_version="s3v4"),
     )
 

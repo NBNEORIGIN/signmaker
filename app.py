@@ -3139,7 +3139,7 @@ def generate_lifestyle_images():
         
         # Try to get R2 upload function
         try:
-            from r2_upload import upload_to_r2
+            from r2_storage import upload_image as upload_to_r2
             can_upload = True
         except ImportError:
             can_upload = False
