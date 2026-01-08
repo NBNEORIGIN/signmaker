@@ -15,6 +15,10 @@ from typing import Optional
 from urllib.parse import urlencode, parse_qs, urlparse
 
 import requests
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,

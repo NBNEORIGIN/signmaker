@@ -238,10 +238,9 @@ HTML_TEMPLATE = '''
                 <h2>Export Products</h2>
                 <p style="margin-bottom: 15px; color: #666;">Export approved products to various platforms.</p>
                 
-                <h3 style="margin-top: 20px;">Marketplace Flatfiles</h3>
+                <h3 style="margin-top: 20px;">Marketplace Exports</h3>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
                     <button class="btn btn-success" onclick="exportFlatfile()">📥 Amazon Flatfile</button>
-                    <button class="btn btn-primary" onclick="exportEbay()">📥 eBay CSV</button>
                     <button class="btn btn-warning" onclick="exportEtsy()">📥 Etsy Shop Uploader</button>
                 </div>
                 
@@ -249,16 +248,15 @@ HTML_TEMPLATE = '''
                 <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 20px;">
                     <button class="btn btn-primary" onclick="publishToEbay(true)">🛒 Publish to eBay (with Ads)</button>
                     <button class="btn btn-secondary" onclick="publishToEbay(false)">🛒 Publish to eBay (no Ads)</button>
-                    <span style="color: #888; font-size: 12px;">Creates listings via eBay API with auto-promotion</span>
+                    <span style="color: #888; font-size: 12px;">Creates listings via eBay API with auto-promotion (5% ad rate)</span>
                 </div>
                 
-                <h3>Image Downloads</h3>
+                <h3>M Number Folders (Staff)</h3>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <button class="btn btn-secondary" onclick="exportAllImages()">📦 Download All Images (ZIP)</button>
-                    <button class="btn btn-success" onclick="exportMNumberFolders()">📁 Download M Number Folders (Staff)</button>
+                    <button class="btn btn-success" onclick="exportMNumberFolders()">📁 Download M Number Folders</button>
                 </div>
                 <p style="margin-top: 10px; color: #888; font-size: 12px;">
-                    M Number Folders include full directory structure (001 Design/001 MASTER FILE, 002 Images) for Google Drive.
+                    Full directory structure for Google Drive: 001 Design/001 MASTER FILE (SVG), 002 Images (PNG/JPEG).
                 </p>
                 
                 <div id="export-status" style="margin-top: 15px;"></div>

@@ -1,20 +1,22 @@
 """Etsy Shop Uploader export generator.
 
 Generates Etsy Shop Uploader compatible XLSX from product database.
+Uses exact template format from working exports.
 """
 import io
 import logging
 from typing import Optional
+from pathlib import Path
 
 import openpyxl
 
 # Size mappings
 SIZE_CONFIG = {
-    "dracula": {"display": "95mm x 95mm", "price": 10.99, "code": "XS"},
-    "saville": {"display": "110mm x 95mm", "price": 11.99, "code": "S"},
-    "dick": {"display": "140mm x 90mm", "price": 12.99, "code": "M"},
-    "barzan": {"display": "190mm x 140mm", "price": 15.99, "code": "L"},
-    "baby_jesus": {"display": "290mm x 190mm", "price": 17.99, "code": "XL"},
+    "dracula": {"display": "95mm x 95mm", "dims": (9.5, 9.5, 0.1), "price": 10.99},
+    "saville": {"display": "110mm x 95mm", "dims": (11.0, 9.5, 0.1), "price": 11.99},
+    "dick": {"display": "140mm x 90mm", "dims": (14.0, 9.0, 0.1), "price": 12.99},
+    "barzan": {"display": "190mm x 140mm", "dims": (19.0, 14.0, 0.1), "price": 15.99},
+    "baby_jesus": {"display": "290mm x 190mm", "dims": (29.0, 19.0, 0.1), "price": 17.99},
 }
 
 # Color mappings
@@ -24,39 +26,32 @@ COLOR_DISPLAY = {
     "white": "White",
 }
 
-# Shop Uploader configuration
+# Shop Uploader configuration - these IDs are from your Etsy account
 SHOP_UPLOADER_CONFIG = {
     "category": "Signs (2844)",
-    "shipping_profile": "Postage 2025",
-    "return_policy": "30 Day Returns",
+    "shipping_profile_id": "Postage 2025 (208230423243)",
+    "readiness_state_id": 1402336022581,
+    "return_policy_id": "return=true|exchange=true|deadline=30 (1074420280634)",
 }
 
-# Shop Uploader columns
+# Full Shop Uploader columns (exact match to template)
 SHOP_UPLOADER_COLUMNS = [
-    "listing_id",
-    "parent_sku",
-    "sku",
-    "title",
-    "description",
-    "price",
-    "quantity",
-    "category",
-    "_primary_color",
-    "_secondary_color",
-    "tags",
-    "materials",
-    "image1",
-    "image2",
-    "image3",
-    "image4",
-    "image5",
-    "variation_option1_name",
-    "variation_option1_value",
-    "variation_option2_name",
-    "variation_option2_value",
-    "shipping_profile",
-    "return_policy",
-    "processing_time",
+    "listing_id", "parent_sku", "sku", "title", "description", "price", "quantity",
+    "category", "_primary_color", "_secondary_color", "_occasion", "_holiday",
+    "_deprecated_diameter", "_deprecated_dimensions", "_deprecated_fabric", "_deprecated_finish",
+    "_deprecated_flavor", "_deprecated_height", "_deprecated_length", "_deprecated_material",
+    "_deprecated_pattern", "_deprecated_scent", "_deprecated_size", "_deprecated_style",
+    "_deprecated_weight", "_deprecated_width", "_deprecated_device",
+    "option1_name", "option1_value", "option2_name", "option2_value",
+    "image_1", "image_2", "image_3", "image_4", "image_5", "image_6", "image_7", "image_8", "image_9", "image_10",
+    "shipping_profile_id", "readiness_state_id", "return_policy_id",
+    "length", "width", "height", "dimensions_unit", "weight", "weight_unit",
+    "type", "who_made", "is_made_to_order", "year_made", "is_vintage", "is_supply",
+    "is_taxable", "auto_renew", "is_customizable", "is_personalizable",
+    "personalization_is_required", "personalization_instructions", "personalization_char_count_max",
+    "style_1", "style_2",
+    "tag_1", "tag_2", "tag_3", "tag_4", "tag_5", "tag_6", "tag_7", "tag_8", "tag_9", "tag_10", "tag_11", "tag_12", "tag_13",
+    "action", "listing_state", "overwrite_images"
 ]
 
 
@@ -90,8 +85,8 @@ def generate_etsy_xlsx(products: list[dict], r2_public_url: str = "") -> bytes:
         parent_groups[desc].append(product)
     
     for desc, group in parent_groups.items():
-        # Use first product's m_number as parent SKU
-        parent_sku = group[0].get("m_number", "")
+        # Use description as parent SKU base
+        parent_sku = desc.upper().replace(" ", "_") + "_PARENT"
         
         for product in group:
             m_number = product.get("m_number", "")
@@ -100,39 +95,46 @@ def generate_etsy_xlsx(products: list[dict], r2_public_url: str = "") -> bytes:
             
             size_info = SIZE_CONFIG.get(size, SIZE_CONFIG["dracula"])
             color_display = COLOR_DISPLAY.get(color, "Silver")
+            dims = size_info["dims"]
             
             # Build title (max 140 chars for Etsy)
-            title = f"{desc} Sign - {size_info['display']} Brushed Aluminium - {color_display}"
+            title = f"{desc} Sign – {size_info['display']} Brushed Aluminium, Weatherproof, Self-Adhesive"
             if len(title) > 140:
                 title = title[:137] + "..."
             
             # Build description
-            description = f"""{desc}
+            description = f"""Clearly mark your property with this professional brushed aluminium sign. Perfect for maintaining control over private areas and restricted access spaces.
 
-Premium quality brushed aluminium sign with UV-resistant printing.
+Crafted from premium 1mm brushed aluminium with a sophisticated {color_display.lower()} finish, this compact {size_info['display']} sign delivers maximum impact whilst maintaining an elegant appearance. The UV-printed design ensures crystal-clear visibility, making your message unmistakable.
 
-SPECIFICATIONS:
-• Size: {size_info['display']}
-• Material: 1mm Brushed Aluminium
-• Finish: {color_display}
-• Mounting: Self-adhesive backing (peel and stick)
-• Weatherproof and UV resistant
-• Rounded corners for safety
+Installation couldn't be easier thanks to the high-quality self-adhesive backing – simply peel and stick with NO drilling required. The weatherproof construction and UV-resistant printing guarantee long-lasting performance in all outdoor conditions, whilst rounded corners provide a professional finish and prevent injury.
 
-Perfect for offices, warehouses, shops, and public spaces.
-
-SHIPPING:
-Free UK delivery. Dispatched within 1-3 business days.
-"""
+Ideal for private driveways, residential property entrances, business areas, and commercial zones. This durable sign offers an effective, maintenance-free solution."""
             
-            # Image URLs
+            # Image URLs (URL-encoded)
             images = []
             if r2_public_url:
-                for img_type in ["main", "dimensions", "peel_and_stick", "rear"]:
-                    images.append(f"{r2_public_url}/{m_number}/{m_number}_{img_type}.jpg")
+                for img_num in range(1, 5):
+                    img_url = f"{r2_public_url}/{m_number}%20-%20{img_num:03d}.jpg"
+                    images.append(img_url)
             
-            # Tags (comma-separated, max 13)
-            tags = f"{desc.lower()},sign,aluminium sign,safety sign,{color_display.lower()} sign,office sign,warehouse sign,self adhesive sign,weatherproof sign,uk sign"
+            # Generate tags (max 13)
+            base_desc = desc.lower()
+            tags = [
+                base_desc.replace(" ", " "),
+                "sign",
+                "aluminium sign",
+                "safety sign",
+                f"{color_display.lower()} sign",
+                "office sign",
+                "weatherproof",
+                "self adhesive",
+                "uk sign",
+                "property sign",
+                "warning sign",
+                "metal sign",
+                "professional sign"
+            ]
             
             row_data = {
                 "listing_id": "",
@@ -141,24 +143,66 @@ Free UK delivery. Dispatched within 1-3 business days.
                 "title": title,
                 "description": description,
                 "price": size_info["price"],
-                "quantity": 10,
+                "quantity": 999,
                 "category": SHOP_UPLOADER_CONFIG["category"],
                 "_primary_color": color_display,
                 "_secondary_color": "",
-                "tags": tags,
-                "materials": "Aluminium",
-                "image1": images[0] if len(images) > 0 else "",
-                "image2": images[1] if len(images) > 1 else "",
-                "image3": images[2] if len(images) > 2 else "",
-                "image4": images[3] if len(images) > 3 else "",
-                "image5": "",
-                "variation_option1_name": "Size",
-                "variation_option1_value": size_info["display"],
-                "variation_option2_name": "Colour",
-                "variation_option2_value": color_display,
-                "shipping_profile": SHOP_UPLOADER_CONFIG["shipping_profile"],
-                "return_policy": SHOP_UPLOADER_CONFIG["return_policy"],
-                "processing_time": "1-3 business days",
+                "_occasion": "",
+                "_holiday": "",
+                "option1_name": "Size",
+                "option1_value": size_info["display"],
+                "option2_name": "_primary_color",
+                "option2_value": color_display,
+                "image_1": images[0] if len(images) > 0 else "",
+                "image_2": images[1] if len(images) > 1 else "",
+                "image_3": images[2] if len(images) > 2 else "",
+                "image_4": images[3] if len(images) > 3 else "",
+                "image_5": "",
+                "image_6": "",
+                "image_7": "",
+                "image_8": "",
+                "image_9": "",
+                "image_10": "",
+                "shipping_profile_id": SHOP_UPLOADER_CONFIG["shipping_profile_id"],
+                "readiness_state_id": SHOP_UPLOADER_CONFIG["readiness_state_id"],
+                "return_policy_id": SHOP_UPLOADER_CONFIG["return_policy_id"],
+                "length": dims[0],
+                "width": dims[1],
+                "height": dims[2],
+                "dimensions_unit": "cm",
+                "weight": 50,
+                "weight_unit": "g",
+                "type": "physical",
+                "who_made": "i_did",
+                "is_made_to_order": "TRUE",
+                "year_made": "",
+                "is_vintage": "FALSE",
+                "is_supply": "FALSE",
+                "is_taxable": "TRUE",
+                "auto_renew": "TRUE",
+                "is_customizable": "FALSE",
+                "is_personalizable": "FALSE",
+                "personalization_is_required": "FALSE",
+                "personalization_instructions": "",
+                "personalization_char_count_max": "",
+                "style_1": "Modern",
+                "style_2": "",
+                "tag_1": tags[0] if len(tags) > 0 else "",
+                "tag_2": tags[1] if len(tags) > 1 else "",
+                "tag_3": tags[2] if len(tags) > 2 else "",
+                "tag_4": tags[3] if len(tags) > 3 else "",
+                "tag_5": tags[4] if len(tags) > 4 else "",
+                "tag_6": tags[5] if len(tags) > 5 else "",
+                "tag_7": tags[6] if len(tags) > 6 else "",
+                "tag_8": tags[7] if len(tags) > 7 else "",
+                "tag_9": tags[8] if len(tags) > 8 else "",
+                "tag_10": tags[9] if len(tags) > 9 else "",
+                "tag_11": tags[10] if len(tags) > 10 else "",
+                "tag_12": tags[11] if len(tags) > 11 else "",
+                "tag_13": tags[12] if len(tags) > 12 else "",
+                "action": "create",
+                "listing_state": "draft",
+                "overwrite_images": "TRUE",
             }
             
             for col, header in enumerate(SHOP_UPLOADER_COLUMNS, 1):
