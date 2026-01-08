@@ -455,10 +455,10 @@ HTML_TEMPLATE = '''
                     </div>
                     
                     <!-- Smaller Gold/White Variants - BELOW controls -->
-                    <div style="display: flex; gap: 6px; padding: 10px; background: #f8f8f8; justify-content: center; flex-wrap: wrap;">
+                    <div style="display: flex; gap: 10px; padding: 10px; background: #f8f8f8; justify-content: center; flex-wrap: wrap;">
                         ${goldVariant ? `
-                        <div style="text-align: center; width: 100px;">
-                            <img src="/api/preview/${goldVariant.m_number}?t=${Date.now()}" alt="${goldVariant.m_number}" style="width: 100%; border-radius: 4px; border: 1px solid #ddd;">
+                        <div style="text-align: center;">
+                            <img src="/api/preview/${goldVariant.m_number}?t=${Date.now()}" alt="${goldVariant.m_number}" style="width: 80px; height: 80px; object-fit: contain; border-radius: 4px; border: 1px solid #ddd; background: white;">
                             <div style="font-size: 8px; margin-top: 3px;">
                                 <strong>${goldVariant.m_number}</strong> Gold
                                 <button onclick="setQAStatus('${goldVariant.m_number}', 'rejected')" style="font-size: 7px; padding: 1px 3px; margin-left: 2px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 2px;">✗</button>
@@ -466,8 +466,8 @@ HTML_TEMPLATE = '''
                         </div>
                         ` : ''}
                         ${whiteVariant ? `
-                        <div style="text-align: center; width: 100px;">
-                            <img src="/api/preview/${whiteVariant.m_number}?t=${Date.now()}" alt="${whiteVariant.m_number}" style="width: 100%; border-radius: 4px; border: 1px solid #ddd;">
+                        <div style="text-align: center;">
+                            <img src="/api/preview/${whiteVariant.m_number}?t=${Date.now()}" alt="${whiteVariant.m_number}" style="width: 80px; height: 80px; object-fit: contain; border-radius: 4px; border: 1px solid #ddd; background: white;">
                             <div style="font-size: 8px; margin-top: 3px;">
                                 <strong>${whiteVariant.m_number}</strong> White
                                 <button onclick="setQAStatus('${whiteVariant.m_number}', 'rejected')" style="font-size: 7px; padding: 1px 3px; margin-left: 2px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 2px;">✗</button>
@@ -475,8 +475,8 @@ HTML_TEMPLATE = '''
                         </div>
                         ` : ''}
                         <!-- Lifestyle Image -->
-                        <div style="text-align: center; width: 100px;">
-                            <div id="lifestyle-${p.m_number}" style="width: 100%; height: 70px; background: #ddd; border-radius: 4px; display: flex; align-items: center; justify-content: center; border: 1px solid #ccc;">
+                        <div style="text-align: center;">
+                            <div id="lifestyle-${p.m_number}" style="width: 80px; height: 80px; background: #ddd; border-radius: 4px; display: flex; align-items: center; justify-content: center; border: 1px solid #ccc;">
                                 <button onclick="generateLifestyleForProduct('${p.m_number}')" style="font-size: 8px; padding: 3px 6px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 3px;">🎨 Lifestyle</button>
                             </div>
                         </div>
@@ -990,7 +990,7 @@ HTML_TEMPLATE = '''
                 const data = await resp.json();
                 
                 if (data.success && data.image_url) {
-                    container.innerHTML = `<img src="${data.image_url}?t=${Date.now()}" style="width: 100%; border-radius: 4px;">`;
+                    container.innerHTML = `<img src="${data.image_url}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 4px;">`;
                 } else {
                     container.innerHTML = `<span style="font-size: 8px; color: #c00;">${data.error || 'Failed'}</span>`;
                 }
