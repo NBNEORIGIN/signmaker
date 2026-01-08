@@ -333,6 +333,24 @@ HTML_TEMPLATE = '''
                     <span id="lifestyle-status" style="margin-top: 10px; display: block; font-size: 12px;"></span>
                 </div>
                 
+                <!-- Amazon Flatfile Preview Table -->
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <h3 style="margin: 0 0 10px 0;">📋 Amazon Flatfile Preview</h3>
+                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                        Preview of the Amazon flatfile data that will be exported.
+                    </p>
+                    <button class="btn btn-secondary" onclick="loadFlatfilePreview()" style="margin-bottom: 10px;">🔄 Refresh Preview</button>
+                    <div style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
+                        <table id="flatfile-preview-table" style="font-size: 11px; white-space: nowrap;">
+                            <thead id="flatfile-thead" style="position: sticky; top: 0; background: #e9ecef;">
+                            </thead>
+                            <tbody id="flatfile-tbody">
+                                <tr><td colspan="10" style="text-align: center; color: #888; padding: 20px;">Click "Refresh Preview" to load data</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
                 <!-- Step 2: Export to All Marketplaces -->
                 <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
                     <h3 style="margin: 0 0 10px 0;">📦 Step 2: Export to All Marketplaces</h3>
@@ -1678,6 +1696,49 @@ Use Cases: ${useCases}
             }
         }
         
+        // Load Amazon flatfile preview table
+        async function loadFlatfilePreview() {
+            exportLog('Loading flatfile preview...');
+            const thead = document.getElementById('flatfile-thead');
+            const tbody = document.getElementById('flatfile-tbody');
+            
+            try {
+                const resp = await fetch('/api/export/flatfile-preview');
+                const data = await resp.json();
+                
+                if (data.success) {
+                    // Build header row
+                    const headers = data.headers;
+                    thead.innerHTML = '<tr>' + headers.map(h => `<th style="padding: 8px; border: 1px solid #ddd; background: #e9ecef;">${h}</th>`).join('') + '</tr>';
+                    
+                    // Build data rows
+                    let rowsHtml = '';
+                    data.rows.forEach((row, idx) => {
+                        const bgColor = idx % 2 === 0 ? '#fff' : '#f8f9fa';
+                        const isParent = row.parent_child === 'Parent';
+                        const rowStyle = isParent ? 'background: #fff3cd; font-weight: bold;' : `background: ${bgColor};`;
+                        rowsHtml += '<tr style="' + rowStyle + '">';
+                        headers.forEach(h => {
+                            let val = row[h] || '';
+                            // Truncate long values
+                            if (val.length > 40) val = val.substring(0, 37) + '...';
+                            rowsHtml += `<td style="padding: 6px 8px; border: 1px solid #ddd;">${val}</td>`;
+                        });
+                        rowsHtml += '</tr>';
+                    });
+                    tbody.innerHTML = rowsHtml;
+                    
+                    exportLog(`Loaded ${data.rows.length} rows`, 'success');
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="10" style="color: red; padding: 20px;">Error: ${data.error}</td></tr>`;
+                    exportLog(`Error: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="10" style="color: red; padding: 20px;">Error loading preview</td></tr>`;
+                exportLog(`Error: ${e.message}`, 'error');
+            }
+        }
+        
         // Load products on page load
         loadProducts();
     </script>
@@ -2297,6 +2358,99 @@ def publish_to_ebay():
             return jsonify({"error": "Failed to create listing"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/export/flatfile-preview')
+def flatfile_preview():
+    """Return Amazon flatfile data as JSON for preview table."""
+    import os
+    
+    all_products = Product.all()
+    if not all_products:
+        return jsonify({"success": False, "error": "No products found"}), 400
+    
+    # Size dimensions and mappings
+    SIZE_DIMENSIONS_CM = {
+        "dracula": (9.5, 9.5),
+        "saville": (11.0, 9.5),
+        "dick": (14.0, 9.0),
+        "barzan": (19.0, 14.0),
+        "baby_jesus": (29.0, 19.0),
+    }
+    SIZE_MAP_VALUES = {
+        "dracula": "XS",
+        "saville": "S",
+        "dick": "M",
+        "barzan": "L",
+        "baby_jesus": "XL",
+    }
+    SIZE_PRICING = {
+        "dracula": 10.99,
+        "saville": 11.99,
+        "dick": 12.99,
+        "barzan": 15.99,
+        "baby_jesus": 17.99,
+    }
+    COLOR_DISPLAY = {"silver": "Silver", "white": "White", "gold": "Gold"}
+    R2_PUBLIC_URL = os.environ.get("R2_PUBLIC_URL", "https://pub-f0f96448c91147489e7b6c6b22ed5010.r2.dev")
+    
+    # Get theme from first product
+    theme = all_products[0].get('description', 'Sign') if all_products else 'Sign'
+    parent_sku = theme.upper().replace(" ", "_").replace("-", "_")
+    import re
+    parent_sku = re.sub(r'[^A-Z0-9_]', '', parent_sku)
+    if not parent_sku.endswith("_PARENT"):
+        parent_sku = f"{parent_sku}_PARENT"
+    
+    # Headers for display (subset of full flatfile)
+    headers = ['item_sku', 'parent_child', 'item_name', 'color_name', 'size_name', 'external_product_id', 'list_price', 'main_image_url']
+    
+    rows = []
+    
+    # Parent row
+    parent_title = f"{theme} Sign – Brushed Aluminium, Weatherproof, Self-Adhesive"
+    rows.append({
+        'item_sku': parent_sku,
+        'parent_child': 'Parent',
+        'item_name': parent_title[:50] + '...' if len(parent_title) > 50 else parent_title,
+        'color_name': '',
+        'size_name': '',
+        'external_product_id': '',
+        'list_price': '',
+        'main_image_url': ''
+    })
+    
+    # Child rows
+    for product in all_products:
+        m_number = product['m_number']
+        size = product.get('size', 'saville').lower()
+        color = product.get('color', 'silver').lower()
+        ean = product.get('ean', '')
+        
+        dims = SIZE_DIMENSIONS_CM.get(size, (11.0, 9.5))
+        size_code = SIZE_MAP_VALUES.get(size, "M")
+        price = SIZE_PRICING.get(size, 12.99)
+        color_display = COLOR_DISPLAY.get(color, color.title())
+        
+        title = f"{theme} Sign – {dims[0]}x{dims[1]}cm Brushed Aluminium"
+        main_image = f"{R2_PUBLIC_URL}/{m_number} - 001.png"
+        
+        rows.append({
+            'item_sku': m_number,
+            'parent_child': 'Child',
+            'item_name': title[:50] + '...' if len(title) > 50 else title,
+            'color_name': color_display,
+            'size_name': size_code,
+            'external_product_id': str(ean) if ean else '',
+            'list_price': f"£{price:.2f}",
+            'main_image_url': main_image[:40] + '...' if len(main_image) > 40 else main_image
+        })
+    
+    return jsonify({
+        "success": True,
+        "headers": headers,
+        "rows": rows
+    })
 
 
 @app.route('/api/export/flatfile', methods=['POST'])
