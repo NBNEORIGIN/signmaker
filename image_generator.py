@@ -444,15 +444,20 @@ def generate_product_image(product: dict, template_type: str = "main") -> bytes:
     
     # Convert to string and render
     svg_content = etree.tostring(root, encoding="unicode")
-    png_bytes = render_svg_to_bytes(svg_content, scale=4, transparent=render_transparent)
+    # For peel_and_stick, use full_page to capture elements outside viewBox (EASY, arrow, PEEL & STICK text)
+    use_full_page = (template_type == "peel_and_stick")
+    png_bytes = render_svg_to_bytes(svg_content, scale=4, transparent=render_transparent, full_page=use_full_page)
     
     return png_bytes
 
 
 def generate_transparent_product_image(product: dict) -> bytes:
     """
-    Generate a transparent PNG of just the sign (no template background).
+    Generate a transparent PNG of the main product image.
     Used for lifestyle image compositing.
+    
+    This uses the actual main template and renders it with transparency,
+    so the product looks exactly like the main image but with transparent background.
     
     Args:
         product: Product dict from database
@@ -460,6 +465,8 @@ def generate_transparent_product_image(product: dict) -> bytes:
     Returns:
         PNG image with transparency as bytes
     """
+    # Use the main template but render with transparency
+    # This ensures the lifestyle image looks like the actual product
     size = product.get("size", "saville").lower()
     color = product.get("color", "silver").lower()
     orientation = product.get("orientation", "landscape").lower()
@@ -479,71 +486,19 @@ def generate_transparent_product_image(product: dict) -> bytes:
     icon_offset_y = float(product.get("icon_offset_y", 0.0) or 0.0)
     font = product.get("font", "arial_heavy")
     
-    # Get sign dimensions
-    width_mm, height_mm, is_circular = SIZES.get(size, (115, 95, False))
-    if size in ("dick", "baby_jesus") and orientation == "portrait":
-        width_mm, height_mm = height_mm, width_mm
+    # Load the main template (same as generate_product_image with template_type="main")
+    template_path = _get_template_path(color, size, "main")
+    if not template_path.exists():
+        raise FileNotFoundError(f"Template not found: {template_path}")
     
-    # Create a standalone SVG with just the sign shape and content
-    svg_width = width_mm
-    svg_height = height_mm
+    tree = etree.parse(str(template_path))
+    root = tree.getroot()
     
-    # Create SVG root
-    root = etree.Element(f"{{{SVG_NS}}}svg", nsmap=NSMAP)
-    root.set("width", f"{svg_width}mm")
-    root.set("height", f"{svg_height}mm")
-    root.set("viewBox", f"0 0 {svg_width} {svg_height}")
-    
-    # Add sign background shape
-    if is_circular:
-        # Circular sign (dracula)
-        cx = svg_width / 2
-        cy = svg_height / 2
-        r = min(svg_width, svg_height) / 2 - 2
-        circle = etree.SubElement(root, f"{{{SVG_NS}}}circle")
-        circle.set("cx", str(cx))
-        circle.set("cy", str(cy))
-        circle.set("r", str(r))
-        if color == "silver":
-            circle.set("fill", "#C0C0C0")
-        elif color == "gold":
-            circle.set("fill", "#D4AF37")
-        else:
-            circle.set("fill", "#FFFFFF")
-        circle.set("stroke", "#888888")
-        circle.set("stroke-width", "1")
-    else:
-        # Rectangular sign with rounded corners
-        rect = etree.SubElement(root, f"{{{SVG_NS}}}rect")
-        rect.set("x", "2")
-        rect.set("y", "2")
-        rect.set("width", str(svg_width - 4))
-        rect.set("height", str(svg_height - 4))
-        rect.set("rx", "5")
-        rect.set("ry", "5")
-        if color == "silver":
-            rect.set("fill", "#C0C0C0")
-        elif color == "gold":
-            rect.set("fill", "#D4AF37")
-        else:
-            rect.set("fill", "#FFFFFF")
-        rect.set("stroke", "#888888")
-        rect.set("stroke-width", "1")
-    
-    # Calculate layout for icons and text
-    # SignBounds uses: x, y, width, height, is_circular, padding
-    bounds = SignBounds(
-        x=0,
-        y=0,
-        width=svg_width,
-        height=svg_height,
-        is_circular=is_circular,
-        padding=5.0,
-    )
-    
+    # Get bounds and calculate layout
+    bounds = _get_sign_bounds(size, orientation)
     layout = _calculate_layout(
         bounds, layout_mode, len(icon_files), text_lines,
-        icon_scale, text_scale, size, orientation
+        icon_scale, text_scale, size, orientation, "main"
     )
     
     # Apply QA position offsets

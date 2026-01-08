@@ -28,8 +28,15 @@ def _ensure_browser():
     return _browser
 
 
-def _render_svg_impl(svg_content: str, scale: int, transparent: bool = False) -> bytes:
-    """Internal render function - runs on executor thread."""
+def _render_svg_impl(svg_content: str, scale: int, transparent: bool = False, full_page: bool = False) -> bytes:
+    """Internal render function - runs on executor thread.
+    
+    Args:
+        svg_content: SVG XML string
+        scale: Device scale factor
+        transparent: If True, omit background for transparency
+        full_page: If True, capture full page bounds (for SVGs with elements outside viewBox)
+    """
     browser = _ensure_browser()
     context = browser.new_context(device_scale_factor=scale)
     page = context.new_page()
@@ -40,8 +47,12 @@ def _render_svg_impl(svg_content: str, scale: int, transparent: bool = False) ->
     
     try:
         page.goto(f'file:///{temp_svg.as_posix()}')
-        svg_element = page.locator('svg')
-        png_bytes = svg_element.screenshot(type='png', omit_background=transparent)
+        if full_page:
+            # Capture full page to include elements outside SVG viewBox
+            png_bytes = page.screenshot(type='png', omit_background=transparent, full_page=True)
+        else:
+            svg_element = page.locator('svg')
+            png_bytes = svg_element.screenshot(type='png', omit_background=transparent)
     finally:
         page.close()
         context.close()
@@ -120,7 +131,7 @@ def render_svg_file_to_png(svg_path: Path, output_path: Path, scale: int = 4) ->
     return output_path
 
 
-def render_svg_to_bytes(svg_content: str, scale: int = 4, transparent: bool = False) -> bytes:
+def render_svg_to_bytes(svg_content: str, scale: int = 4, transparent: bool = False, full_page: bool = False) -> bytes:
     """
     Render SVG content to PNG bytes (thread-safe, for streaming/API responses).
     
@@ -128,11 +139,12 @@ def render_svg_to_bytes(svg_content: str, scale: int = 4, transparent: bool = Fa
         svg_content: SVG XML string
         scale: Device scale factor
         transparent: If True, omit background for transparency
+        full_page: If True, capture full page bounds (for SVGs with elements outside viewBox)
     
     Returns:
         PNG image as bytes
     """
-    return _executor.submit(_render_svg_impl, svg_content, scale, transparent).result(timeout=60)
+    return _executor.submit(_render_svg_impl, svg_content, scale, transparent, full_page).result(timeout=60)
 
 
 if __name__ == "__main__":

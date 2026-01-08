@@ -3027,13 +3027,11 @@ def generate_lifestyle_background():
         from openai import OpenAI
         client = OpenAI(api_key=api_key)
         
-        prompt = f"""A professional lifestyle photograph showing a clean, modern interior space 
-where a {theme} would be displayed. The image should show a plain wall or door in an office, 
-warehouse, or commercial building setting. The lighting should be natural and professional. 
-Leave a clear, well-lit empty area on the wall where a sign could be placed. 
-IMPORTANT: The wall must be completely empty - absolutely no signs, plaques, posters, text, 
-labels, or any markings of any kind should be visible anywhere in the image. 
-The space should look like it's waiting for a sign to be installed. Photorealistic style."""
+        prompt = f"""A professional photograph of a clean, empty wall in a modern office or commercial building interior.
+The wall should be plain and completely bare - no signs, no plaques, no posters, no text, no labels, no frames, 
+no decorations, no markings of any kind anywhere in the image. Just a clean empty wall with good lighting.
+The setting should be professional - an office corridor, warehouse entrance, or building lobby.
+Natural lighting, photorealistic style. The wall is waiting for signage to be installed later."""
         
         logging.info("Calling DALL-E 3 API...")
         response = client.images.generate(
