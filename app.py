@@ -131,8 +131,14 @@ HTML_TEMPLATE = '''
         }
         .product-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            grid-template-columns: repeat(3, 1fr);
             gap: 20px;
+        }
+        @media (max-width: 1200px) {
+            .product-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 800px) {
+            .product-grid { grid-template-columns: 1fr; }
         }
         .product-card {
             background: white;
@@ -393,89 +399,92 @@ HTML_TEMPLATE = '''
                 const showOrientationToggle = p.size === 'dick' || p.size === 'baby_jesus';
                 
                 return `
-                <div class="product-card" style="max-width: 500px;">
+                <div class="product-card">
+                    <!-- Header with title -->
+                    <div style="padding: 10px 15px; background: #667eea; color: white;">
+                        <h3 style="margin: 0; font-size: 14px;">${p.description || p.m_number}</h3>
+                        <span style="font-size: 11px; opacity: 0.9;">${p.size}${showOrientationToggle ? ` - ${p.orientation || 'landscape'}` : ''}</span>
+                    </div>
+                    
                     <!-- Large Silver Preview -->
                     <div style="padding: 15px; background: #e8e8e8; text-align: center;">
-                        <img id="main-preview-${p.m_number}" src="/api/preview/${p.m_number}?t=${Date.now()}" alt="${p.m_number}" style="max-width: 100%; max-height: 300px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
-                        <div style="margin-top: 8px; font-size: 12px;">
+                        <img id="main-preview-${p.m_number}" src="/api/preview/${p.m_number}?t=${Date.now()}" alt="${p.m_number}" style="max-width: 100%; max-height: 250px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+                        <div style="margin-top: 8px; font-size: 11px;">
                             <strong>${p.m_number}</strong> - Silver
-                            <button onclick="setQAStatus('${p.m_number}', 'rejected')" style="font-size: 10px; padding: 2px 6px; margin-left: 8px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 3px;">✗ Reject</button>
+                            <button onclick="setQAStatus('${p.m_number}', 'rejected')" style="font-size: 9px; padding: 2px 6px; margin-left: 6px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 3px;">✗ Reject</button>
                         </div>
                     </div>
                     
-                    <!-- Smaller Gold/White Variants -->
-                    <div style="display: flex; gap: 8px; padding: 10px; background: #f5f5f5; justify-content: center;">
+                    <!-- Controls Section - ABOVE variants -->
+                    <div style="padding: 10px; background: #f0f0f0; border-top: 1px solid #ddd;">
+                        ${showOrientationToggle ? `
+                        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                            <label style="width: 70px; font-size: 11px;">Orientation:</label>
+                            <select id="orientation-${p.m_number}" onchange="updateOrientation('${p.m_number}', this.value)" style="flex: 1; padding: 3px; font-size: 11px;">
+                                <option value="landscape" ${(p.orientation || 'landscape') === 'landscape' ? 'selected' : ''}>Landscape</option>
+                                <option value="portrait" ${p.orientation === 'portrait' ? 'selected' : ''}>Portrait</option>
+                            </select>
+                        </div>
+                        ` : ''}
+                        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                            <label style="width: 70px; font-size: 11px;">Icon Scale:</label>
+                            <input type="range" id="icon-scale-${p.m_number}" min="0.5" max="1.5" step="0.01" value="${p.icon_scale || 1.0}" 
+                                oninput="updateScaleDisplay('${p.m_number}', this.value)"
+                                onchange="updateProductScale('${p.m_number}')"
+                                style="flex: 1;">
+                            <input type="number" id="icon-scale-input-${p.m_number}" min="0.5" max="1.5" step="0.01" value="${(p.icon_scale || 1.0).toFixed(2)}"
+                                onchange="setIconScale('${p.m_number}', this.value)"
+                                style="width: 50px; font-size: 10px; padding: 2px;">
+                        </div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <label style="width: 70px; font-size: 11px;">Position:</label>
+                            <div style="display: grid; grid-template-columns: 26px 26px 26px; gap: 2px;">
+                                <div></div>
+                                <button type="button" onclick="moveIcon('${p.m_number}', 0, -2)" style="padding: 3px 6px; font-size: 9px; cursor: pointer;">▲</button>
+                                <div></div>
+                                <button type="button" onclick="moveIcon('${p.m_number}', -2, 0)" style="padding: 3px 6px; font-size: 9px; cursor: pointer;">◀</button>
+                                <button type="button" onclick="centerIcon('${p.m_number}')" style="padding: 3px 5px; font-size: 7px; cursor: pointer;">⊙</button>
+                                <button type="button" onclick="moveIcon('${p.m_number}', 2, 0)" style="padding: 3px 6px; font-size: 9px; cursor: pointer;">▶</button>
+                                <div></div>
+                                <button type="button" onclick="moveIcon('${p.m_number}', 0, 2)" style="padding: 3px 6px; font-size: 9px; cursor: pointer;">▼</button>
+                                <div></div>
+                            </div>
+                            <span style="font-size: 9px; color: #666;" id="offset-${p.m_number}">(${(p.icon_offset_x || 0).toFixed(0)}, ${(p.icon_offset_y || 0).toFixed(0)})</span>
+                            <button class="btn btn-secondary" onclick="regenerateVariants('${p.m_number}')" style="background: #6c757d; padding: 4px 8px; font-size: 10px; margin-left: auto;">🔄 Regenerate</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Smaller Gold/White Variants - BELOW controls -->
+                    <div style="display: flex; gap: 6px; padding: 10px; background: #f8f8f8; justify-content: center; flex-wrap: wrap;">
                         ${goldVariant ? `
-                        <div style="text-align: center; flex: 0 0 120px;">
-                            <img src="/api/preview/${goldVariant.m_number}?t=${Date.now()}" alt="${goldVariant.m_number}" style="width: 100%; border-radius: 4px;">
-                            <div style="font-size: 9px; margin-top: 4px;">
+                        <div style="text-align: center; width: 100px;">
+                            <img src="/api/preview/${goldVariant.m_number}?t=${Date.now()}" alt="${goldVariant.m_number}" style="width: 100%; border-radius: 4px; border: 1px solid #ddd;">
+                            <div style="font-size: 8px; margin-top: 3px;">
                                 <strong>${goldVariant.m_number}</strong> Gold
-                                <button onclick="setQAStatus('${goldVariant.m_number}', 'rejected')" style="font-size: 8px; padding: 1px 3px; margin-left: 2px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 2px;">✗</button>
+                                <button onclick="setQAStatus('${goldVariant.m_number}', 'rejected')" style="font-size: 7px; padding: 1px 3px; margin-left: 2px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 2px;">✗</button>
                             </div>
                         </div>
                         ` : ''}
                         ${whiteVariant ? `
-                        <div style="text-align: center; flex: 0 0 120px;">
-                            <img src="/api/preview/${whiteVariant.m_number}?t=${Date.now()}" alt="${whiteVariant.m_number}" style="width: 100%; border-radius: 4px;">
-                            <div style="font-size: 9px; margin-top: 4px;">
+                        <div style="text-align: center; width: 100px;">
+                            <img src="/api/preview/${whiteVariant.m_number}?t=${Date.now()}" alt="${whiteVariant.m_number}" style="width: 100%; border-radius: 4px; border: 1px solid #ddd;">
+                            <div style="font-size: 8px; margin-top: 3px;">
                                 <strong>${whiteVariant.m_number}</strong> White
-                                <button onclick="setQAStatus('${whiteVariant.m_number}', 'rejected')" style="font-size: 8px; padding: 1px 3px; margin-left: 2px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 2px;">✗</button>
+                                <button onclick="setQAStatus('${whiteVariant.m_number}', 'rejected')" style="font-size: 7px; padding: 1px 3px; margin-left: 2px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 2px;">✗</button>
                             </div>
                         </div>
                         ` : ''}
-                        <!-- Lifestyle Image Placeholder -->
-                        <div style="text-align: center; flex: 0 0 120px;">
-                            <div id="lifestyle-${p.m_number}" style="width: 100%; height: 80px; background: #ddd; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #666;">
-                                <button onclick="generateLifestyleForProduct('${p.m_number}')" style="font-size: 9px; padding: 4px 8px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 3px;">🎨 Lifestyle</button>
+                        <!-- Lifestyle Image -->
+                        <div style="text-align: center; width: 100px;">
+                            <div id="lifestyle-${p.m_number}" style="width: 100%; height: 70px; background: #ddd; border-radius: 4px; display: flex; align-items: center; justify-content: center; border: 1px solid #ccc;">
+                                <button onclick="generateLifestyleForProduct('${p.m_number}')" style="font-size: 8px; padding: 3px 6px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 3px;">🎨 Lifestyle</button>
                             </div>
                         </div>
                     </div>
                     
-                    <div class="product-card-body">
-                        <h3>${p.description || p.m_number}</h3>
-                        <p class="product-meta">${p.size}${showOrientationToggle ? ` - ${p.orientation || 'landscape'}` : ''}</p>
-                        
-                        <div style="margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 6px;">
-                            ${showOrientationToggle ? `
-                            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
-                                <label style="width: 80px; font-size: 12px;">Orientation:</label>
-                                <select id="orientation-${p.m_number}" onchange="updateOrientation('${p.m_number}', this.value)" style="flex: 1; padding: 4px;">
-                                    <option value="landscape" ${(p.orientation || 'landscape') === 'landscape' ? 'selected' : ''}>Landscape</option>
-                                    <option value="portrait" ${p.orientation === 'portrait' ? 'selected' : ''}>Portrait</option>
-                                </select>
-                            </div>
-                            ` : ''}
-                            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
-                                <label style="width: 80px; font-size: 12px;">Icon Scale:</label>
-                                <input type="range" id="icon-scale-${p.m_number}" min="0.5" max="1.5" step="0.01" value="${p.icon_scale || 1.0}" 
-                                    oninput="updateScaleDisplay('${p.m_number}', this.value)"
-                                    onchange="updateProductScale('${p.m_number}')"
-                                    style="flex: 1;">
-                                <input type="number" id="icon-scale-input-${p.m_number}" min="0.5" max="1.5" step="0.01" value="${(p.icon_scale || 1.0).toFixed(2)}"
-                                    onchange="setIconScale('${p.m_number}', this.value)"
-                                    style="width: 55px; font-size: 11px; padding: 2px 4px;">
-                            </div>
-                            <div style="display: flex; gap: 8px; align-items: center;">
-                                <label style="width: 80px; font-size: 12px;">Position:</label>
-                                <div style="display: grid; grid-template-columns: 30px 30px 30px; gap: 2px;">
-                                    <div></div>
-                                    <button type="button" onclick="moveIcon('${p.m_number}', 0, -2)" style="padding: 4px 8px; font-size: 10px; cursor: pointer;">▲</button>
-                                    <div></div>
-                                    <button type="button" onclick="moveIcon('${p.m_number}', -2, 0)" style="padding: 4px 8px; font-size: 10px; cursor: pointer;">◀</button>
-                                    <button type="button" onclick="centerIcon('${p.m_number}')" style="padding: 4px 6px; font-size: 8px; cursor: pointer;">⊙</button>
-                                    <button type="button" onclick="moveIcon('${p.m_number}', 2, 0)" style="padding: 4px 8px; font-size: 10px; cursor: pointer;">▶</button>
-                                    <div></div>
-                                    <button type="button" onclick="moveIcon('${p.m_number}', 0, 2)" style="padding: 4px 8px; font-size: 10px; cursor: pointer;">▼</button>
-                                    <div></div>
-                                </div>
-                                <span style="font-size: 10px; color: #666;" id="offset-${p.m_number}">(${(p.icon_offset_x || 0).toFixed(0)}, ${(p.icon_offset_y || 0).toFixed(0)})</span>
-                            </div>
-                        </div>
-                        
-                        <div class="actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
-                            <button class="btn btn-success" onclick="approveWithVariants('${p.m_number}')">✓ Approve All</button>
-                            <button class="btn btn-secondary" onclick="regenerateVariants('${p.m_number}')" style="background: #6c757d;">🔄 Regenerate</button>
-                        </div>
+                    <!-- Action buttons -->
+                    <div style="padding: 10px; background: white; border-top: 1px solid #eee;">
+                        <button class="btn btn-success" onclick="approveWithVariants('${p.m_number}')" style="width: 100%;">✓ Approve All Colors</button>
                     </div>
                 </div>
             `}).join('');
