@@ -390,41 +390,61 @@ HTML_TEMPLATE = '''
                 // Find gold and white variants
                 const goldVariant = products.find(v => v.size === p.size && v.description === p.description && v.color === 'gold');
                 const whiteVariant = products.find(v => v.size === p.size && v.description === p.description && v.color === 'white');
+                const showOrientationToggle = p.size === 'dick' || p.size === 'baby_jesus';
                 
                 return `
-                <div class="product-card" style="max-width: 450px;">
-                    <div style="display: flex; gap: 5px; padding: 10px; background: #f0f0f0;">
-                        <div style="flex: 1; text-align: center;">
-                            <img src="/api/preview/${p.m_number}?t=${Date.now()}" alt="${p.m_number}" style="max-width: 100%; border-radius: 4px;">
-                            <div style="font-size: 10px; margin-top: 4px;">
-                                <strong>${p.m_number}</strong> (Silver)
-                                <button onclick="setQAStatus('${p.m_number}', 'rejected')" style="font-size: 9px; padding: 1px 4px; margin-left: 4px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 3px;">✗</button>
-                            </div>
+                <div class="product-card" style="max-width: 500px;">
+                    <!-- Large Silver Preview -->
+                    <div style="padding: 15px; background: #e8e8e8; text-align: center;">
+                        <img id="main-preview-${p.m_number}" src="/api/preview/${p.m_number}?t=${Date.now()}" alt="${p.m_number}" style="max-width: 100%; max-height: 300px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+                        <div style="margin-top: 8px; font-size: 12px;">
+                            <strong>${p.m_number}</strong> - Silver
+                            <button onclick="setQAStatus('${p.m_number}', 'rejected')" style="font-size: 10px; padding: 2px 6px; margin-left: 8px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 3px;">✗ Reject</button>
                         </div>
+                    </div>
+                    
+                    <!-- Smaller Gold/White Variants -->
+                    <div style="display: flex; gap: 8px; padding: 10px; background: #f5f5f5; justify-content: center;">
                         ${goldVariant ? `
-                        <div style="flex: 1; text-align: center;">
-                            <img src="/api/preview/${goldVariant.m_number}?t=${Date.now()}" alt="${goldVariant.m_number}" style="max-width: 100%; border-radius: 4px;">
-                            <div style="font-size: 10px; margin-top: 4px;">
-                                <strong>${goldVariant.m_number}</strong> (Gold)
-                                <button onclick="setQAStatus('${goldVariant.m_number}', 'rejected')" style="font-size: 9px; padding: 1px 4px; margin-left: 4px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 3px;">✗</button>
+                        <div style="text-align: center; flex: 0 0 120px;">
+                            <img src="/api/preview/${goldVariant.m_number}?t=${Date.now()}" alt="${goldVariant.m_number}" style="width: 100%; border-radius: 4px;">
+                            <div style="font-size: 9px; margin-top: 4px;">
+                                <strong>${goldVariant.m_number}</strong> Gold
+                                <button onclick="setQAStatus('${goldVariant.m_number}', 'rejected')" style="font-size: 8px; padding: 1px 3px; margin-left: 2px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 2px;">✗</button>
                             </div>
                         </div>
                         ` : ''}
                         ${whiteVariant ? `
-                        <div style="flex: 1; text-align: center;">
-                            <img src="/api/preview/${whiteVariant.m_number}?t=${Date.now()}" alt="${whiteVariant.m_number}" style="max-width: 100%; border-radius: 4px;">
-                            <div style="font-size: 10px; margin-top: 4px;">
-                                <strong>${whiteVariant.m_number}</strong> (White)
-                                <button onclick="setQAStatus('${whiteVariant.m_number}', 'rejected')" style="font-size: 9px; padding: 1px 4px; margin-left: 4px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 3px;">✗</button>
+                        <div style="text-align: center; flex: 0 0 120px;">
+                            <img src="/api/preview/${whiteVariant.m_number}?t=${Date.now()}" alt="${whiteVariant.m_number}" style="width: 100%; border-radius: 4px;">
+                            <div style="font-size: 9px; margin-top: 4px;">
+                                <strong>${whiteVariant.m_number}</strong> White
+                                <button onclick="setQAStatus('${whiteVariant.m_number}', 'rejected')" style="font-size: 8px; padding: 1px 3px; margin-left: 2px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 2px;">✗</button>
                             </div>
                         </div>
                         ` : ''}
+                        <!-- Lifestyle Image Placeholder -->
+                        <div style="text-align: center; flex: 0 0 120px;">
+                            <div id="lifestyle-${p.m_number}" style="width: 100%; height: 80px; background: #ddd; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #666;">
+                                <button onclick="generateLifestyleForProduct('${p.m_number}')" style="font-size: 9px; padding: 4px 8px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 3px;">🎨 Lifestyle</button>
+                            </div>
+                        </div>
                     </div>
+                    
                     <div class="product-card-body">
                         <h3>${p.description || p.m_number}</h3>
-                        <p class="product-meta">${p.size}</p>
+                        <p class="product-meta">${p.size}${showOrientationToggle ? ` - ${p.orientation || 'landscape'}` : ''}</p>
                         
                         <div style="margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 6px;">
+                            ${showOrientationToggle ? `
+                            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
+                                <label style="width: 80px; font-size: 12px;">Orientation:</label>
+                                <select id="orientation-${p.m_number}" onchange="updateOrientation('${p.m_number}', this.value)" style="flex: 1; padding: 4px;">
+                                    <option value="landscape" ${(p.orientation || 'landscape') === 'landscape' ? 'selected' : ''}>Landscape</option>
+                                    <option value="portrait" ${p.orientation === 'portrait' ? 'selected' : ''}>Portrait</option>
+                                </select>
+                            </div>
+                            ` : ''}
                             <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
                                 <label style="width: 80px; font-size: 12px;">Icon Scale:</label>
                                 <input type="range" id="icon-scale-${p.m_number}" min="0.5" max="1.5" step="0.01" value="${p.icon_scale || 1.0}" 
@@ -923,6 +943,54 @@ HTML_TEMPLATE = '''
             }
         }
         
+        async function updateOrientation(mNumber, orientation) {
+            const silverProduct = products.find(x => x.m_number === mNumber);
+            if (!silverProduct) return;
+            
+            const { size, description } = silverProduct;
+            
+            // Find all color variants
+            const allVariants = products.filter(p => 
+                p.size === size && p.description === description
+            );
+            
+            try {
+                // Update orientation for all variants
+                for (const variant of allVariants) {
+                    await fetch(`/api/products/${variant.m_number}`, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({orientation: orientation})
+                    });
+                    variant.orientation = orientation;
+                }
+                
+                // Refresh all images
+                loadQAProducts();
+            } catch (e) {
+                console.error('Failed to update orientation:', e);
+            }
+        }
+        
+        async function generateLifestyleForProduct(mNumber) {
+            const container = document.getElementById(`lifestyle-${mNumber}`);
+            container.innerHTML = '<span style="font-size: 9px;">Generating...</span>';
+            
+            try {
+                const resp = await fetch(`/api/generate/lifestyle/${mNumber}`, {method: 'POST'});
+                const data = await resp.json();
+                
+                if (data.success && data.image_url) {
+                    container.innerHTML = `<img src="${data.image_url}?t=${Date.now()}" style="width: 100%; border-radius: 4px;">`;
+                } else {
+                    container.innerHTML = `<span style="font-size: 8px; color: #c00;">${data.error || 'Failed'}</span>`;
+                }
+            } catch (e) {
+                container.innerHTML = '<span style="font-size: 8px; color: #c00;">Error</span>';
+                console.error('Failed to generate lifestyle:', e);
+            }
+        }
+        
         // Load products on page load
         loadProducts();
     </script>
@@ -1272,11 +1340,84 @@ def export_all_m_number_folders():
     )
 
 
+@app.route('/api/generate/lifestyle/<m_number>', methods=['POST'])
+def generate_lifestyle_single(m_number):
+    """Generate AI lifestyle image for a single product using DALL-E 3."""
+    import os
+    from generate_lifestyle_images import composite_product_on_background, get_scene_prompt
+    from image_generator import generate_product_image
+    from PIL import Image
+    import io
+    import base64
+    
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return jsonify({"success": False, "error": "OPENAI_API_KEY not set"}), 400
+    
+    product = Product.get(m_number)
+    if not product:
+        return jsonify({"success": False, "error": "Product not found"}), 404
+    
+    try:
+        # Generate main product image
+        png_bytes = generate_product_image(product, "main")
+        product_img = Image.open(io.BytesIO(png_bytes))
+        
+        # Get scene prompt based on description
+        sign_text = product.get("description", "") or product.get("text_line_1", "") or "Sign"
+        scene_prompt = get_scene_prompt(sign_text)
+        
+        # Generate lifestyle background with DALL-E
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        
+        prompt = f"""{scene_prompt}
+
+The image should have a clear, well-lit wall or door surface where a small rectangular sign could be mounted. 
+Leave a visible flat area (about 15-20% of the image) on a wall or door that would be suitable for mounting a sign.
+The area should be at eye level, well-lit, and clearly visible.
+Professional product photography style, high quality, 4K resolution."""
+
+        response = client.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            size="1024x1024",
+            quality="standard",
+            n=1,
+        )
+        
+        image_url = response.data[0].url
+        
+        # Download background
+        import urllib.request
+        with urllib.request.urlopen(image_url) as resp_data:
+            background_data = resp_data.read()
+        
+        background = Image.open(io.BytesIO(background_data))
+        
+        # Composite product onto background
+        lifestyle = composite_product_on_background(product_img, background)
+        
+        # Convert to base64 data URL for inline display
+        buffer = io.BytesIO()
+        lifestyle.save(buffer, format="PNG")
+        img_base64 = base64.b64encode(buffer.getvalue()).decode()
+        
+        return jsonify({
+            "success": True,
+            "image_url": f"data:image/png;base64,{img_base64}"
+        })
+        
+    except Exception as e:
+        logging.error(f"Failed to generate lifestyle for {m_number}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route('/api/generate/lifestyle', methods=['POST'])
 def generate_lifestyle():
     """Generate AI lifestyle images for approved products using DALL-E 3."""
     import os
-    from generate_lifestyle_images import generate_lifestyle_image_dalle, composite_product_on_background, get_scene_prompt
+    from generate_lifestyle_images import composite_product_on_background, get_scene_prompt
     from image_generator import generate_product_image
     from PIL import Image
     import io
