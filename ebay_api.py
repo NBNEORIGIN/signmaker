@@ -290,7 +290,19 @@ class EbayInventoryManager:
             logging.info("Published inventory group %s as listing: %s", group_key, listing_id)
             return listing_id
         except requests.HTTPError as e:
-            logging.error("Failed to publish inventory group %s: %s", group_key, e)
+            error_msg = str(e)
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_data = e.response.json()
+                    errors = error_data.get('errors', [])
+                    if errors:
+                        error_msg = errors[0].get('message', str(e))
+                        # Check if it's a 404 "Offer not available" error
+                        if e.response.status_code == 404 and 'not available' in error_msg.lower():
+                            logging.warning("Inventory group %s has stale offers. Try deleting the group and recreating.", group_key)
+                except:
+                    pass
+            logging.error("Failed to publish inventory group %s: %s", group_key, error_msg)
             return None
 
 
@@ -422,20 +434,26 @@ def create_ebay_listing(products: list[dict], policy_ids: dict, promote: bool = 
         if dry_run:
             logging.info("[DRY RUN] Would create inventory item: %s (%s, %s) at £%.2f", sku, size_name, color_name, price)
         else:
-            # Clean up existing offers
-            manager.withdraw_offer_by_sku(sku)
-            manager.delete_offer_by_sku(sku)
+            # Clean up existing offers first
+            try:
+                manager.withdraw_offer_by_sku(sku)
+                manager.delete_offer_by_sku(sku)
+            except Exception as e:
+                logging.debug("Cleanup for %s: %s", sku, e)
             
             # Create inventory item
             manager.create_or_replace_inventory_item(sku, title, description, image_urls, aspects)
             
-            # Create offer
+            # Always create a fresh offer for each SKU
             try:
-                existing_offers = manager.get_offers_by_sku(sku)
-                if not existing_offers:
-                    manager.create_offer(sku, price, policy_ids)
+                manager.create_offer(sku, price, policy_ids)
+                logging.info("Created offer for SKU: %s at £%.2f", sku, price)
             except requests.HTTPError as e:
-                logging.warning("Could not create offer for %s: %s", sku, e)
+                # If offer already exists (409 conflict), that's OK
+                if hasattr(e, 'response') and e.response.status_code == 409:
+                    logging.info("Offer already exists for %s, continuing", sku)
+                else:
+                    logging.warning("Could not create offer for %s: %s", sku, e)
         
         sku_list.append(sku)
         all_images.extend(image_urls[:3])
@@ -456,6 +474,13 @@ def create_ebay_listing(products: list[dict], policy_ids: dict, promote: bool = 
     if dry_run:
         logging.info("[DRY RUN] Would create inventory group: %s", group_key)
         return "DRY_RUN"
+    
+    # Delete existing inventory item group to clear stale offers
+    try:
+        manager.delete_inventory_item_group(group_key)
+        logging.info("Deleted existing inventory group: %s", group_key)
+    except Exception as e:
+        logging.debug("No existing group to delete or error: %s", e)
     
     # Create inventory item group
     group_title = f"{first_product.get('description', 'Sign')} - Aluminium Sign"[:80]
