@@ -436,6 +436,84 @@ def generate_all_images_for_product(product: dict) -> dict[str, bytes]:
     return images
 
 
+def generate_master_svg_for_product(product: dict) -> bytes:
+    """
+    Generate the master design SVG file for a product.
+    This is the SVG with icons and text injected, used for manufacturing.
+    
+    Args:
+        product: Product dict from database
+    
+    Returns:
+        SVG content as bytes
+    """
+    size = product.get("size", "saville").lower()
+    color = product.get("color", "silver").lower()
+    orientation = product.get("orientation", "landscape").lower()
+    layout_mode = product.get("layout_mode", "A").upper()
+    icon_files = (product.get("icon_files") or "").split(",")
+    icon_files = [f.strip() for f in icon_files if f.strip()]
+    
+    text_lines = [
+        product.get("text_line_1", ""),
+        product.get("text_line_2", ""),
+        product.get("text_line_3", ""),
+    ]
+    
+    icon_scale = float(product.get("icon_scale", 1.0) or 1.0)
+    text_scale = float(product.get("text_scale", 1.0) or 1.0)
+    font = product.get("font", "arial_heavy")
+    
+    # Use master_design_file template
+    if size == "baby_jesus" and orientation == "portrait":
+        template_name = f"{color}_{size}_portrait_master_design_file.svg"
+    else:
+        template_name = f"{color}_{size}_master_design_file.svg"
+    
+    template_path = ASSETS_DIR / template_name
+    if not template_path.exists():
+        # Fall back to main template if master doesn't exist
+        if size == "baby_jesus" and orientation == "portrait":
+            template_name = f"{color}_{size}_portrait_main.svg"
+        else:
+            template_name = f"{color}_{size}_main.svg"
+        template_path = ASSETS_DIR / template_name
+    
+    if not template_path.exists():
+        raise FileNotFoundError(f"Template not found: {template_path}")
+    
+    # Parse template
+    tree = etree.parse(str(template_path))
+    root = tree.getroot()
+    
+    # Get bounds and calculate layout
+    bounds = _get_sign_bounds(size, orientation)
+    layout = _calculate_layout(
+        bounds, layout_mode, len(icon_files), text_lines,
+        icon_scale, text_scale, size, orientation
+    )
+    
+    # Inject icons
+    for icon_file in icon_files:
+        icon_type, icon_data = _load_icon(icon_file)
+        if icon_type == "svg":
+            _inject_icon(root, icon_data, layout.icon_x, layout.icon_y, layout.icon_width, layout.icon_height)
+        elif icon_type == "png":
+            _inject_png_icon(root, icon_data, layout.icon_x, layout.icon_y, layout.icon_width, layout.icon_height)
+    
+    # Add text elements
+    font_family, font_weight = FONTS.get(font, ("Arial", "bold"))
+    for text_elem in layout.text_elements:
+        _add_text_element(
+            root, text_elem["text"], text_elem["x"], text_elem["y"],
+            text_elem["font_size"], text_elem.get("anchor", "middle"),
+            font_family, font_weight
+        )
+    
+    # Return SVG as bytes
+    return etree.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
 def generate_images_job(job: Job, products: list[dict], upload_to_r2: bool = True) -> dict:
     """
     Background job to generate images for multiple products.

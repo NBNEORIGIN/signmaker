@@ -1,16 +1,159 @@
-"""Image export utilities - download M Number folders as ZIP."""
+"""Image export utilities - download M Number folders as ZIP.
+
+Generates proper folder structure for staff use:
+- {M Number} {Description} {Color} {Size}/
+  - 001 Design/
+    - 001 MASTER FILE/
+      - {M Number} MASTER FILE.svg
+  - 002 Images/
+    - {M Number} - 001.png (main)
+    - {M Number} - 002.png (dimensions)
+    - {M Number} - 003.png (peel_and_stick)
+    - {M Number} - 004.png (rear)
+"""
 import io
 import zipfile
 import logging
 from pathlib import Path
 
-from image_generator import generate_all_images_for_product
+from image_generator import generate_all_images_for_product, generate_master_svg_for_product
 from jobs import Job
+
+
+# Image type to numbered filename mapping
+IMAGE_TYPE_NUMBERS = {
+    "main": "001",
+    "dimensions": "002",
+    "peel_and_stick": "003",
+    "rear": "004",
+}
+
+# Size display names
+SIZE_DISPLAY = {
+    "dracula": "Dracula",
+    "saville": "Saville",
+    "dick": "Dick",
+    "barzan": "Barzan",
+    "baby_jesus": "Baby_Jesus",
+}
+
+# Color display names
+COLOR_DISPLAY = {
+    "silver": "Silver",
+    "gold": "Gold",
+    "white": "White",
+}
+
+
+def _get_folder_name(product: dict) -> str:
+    """Generate the full folder name for a product."""
+    m_number = product.get("m_number", "UNKNOWN")
+    description = product.get("description", "Sign")
+    color = product.get("color", "silver").lower()
+    size = product.get("size", "dracula").lower()
+    mounting = product.get("mounting_type", "self_adhesive")
+    
+    # Format mounting type
+    mounting_display = "Self Adhesive" if mounting == "self_adhesive" else "Pre-Drilled"
+    
+    # Build folder name
+    color_display = COLOR_DISPLAY.get(color, color.title())
+    size_display = SIZE_DISPLAY.get(size, size.title())
+    
+    return f"{m_number} {mounting_display} {description} aluminium sign {color_display} {size_display}"
+
+
+def _png_to_jpeg(png_bytes: bytes) -> bytes:
+    """Convert PNG bytes to JPEG bytes."""
+    from PIL import Image
+    from io import BytesIO
+    
+    img = Image.open(BytesIO(png_bytes))
+    if img.mode == "RGBA":
+        background = Image.new("RGB", img.size, (255, 255, 255))
+        background.paste(img, mask=img.split()[3])
+        img = background
+    elif img.mode != "RGB":
+        img = img.convert("RGB")
+    
+    jpeg_buffer = BytesIO()
+    img.save(jpeg_buffer, format="JPEG", quality=95)
+    return jpeg_buffer.getvalue()
+
+
+def generate_m_number_folder_zip(products: list[dict], include_master_svg: bool = True) -> bytes:
+    """
+    Generate a ZIP file with proper M Number folder structure for staff.
+    
+    Structure:
+    - {M Number} {Description} {Color} {Size}/
+      - 001 Design/
+        - 001 MASTER FILE/
+          - {M Number} MASTER FILE.svg
+      - 002 Images/
+        - {M Number} - 001.png
+        - {M Number} - 002.png
+        - etc.
+    
+    Args:
+        products: List of product dicts
+        include_master_svg: Whether to include master SVG file
+    
+    Returns:
+        ZIP file as bytes
+    """
+    zip_buffer = io.BytesIO()
+    
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for product in products:
+            m_number = product.get("m_number", "UNKNOWN")
+            folder_name = _get_folder_name(product)
+            
+            try:
+                # Generate images
+                images = generate_all_images_for_product(product)
+                
+                # Add images to 002 Images folder
+                for img_type, png_bytes in images.items():
+                    img_num = IMAGE_TYPE_NUMBERS.get(img_type, "099")
+                    
+                    # PNG version
+                    png_path = f"{folder_name}/002 Images/{m_number} - {img_num}.png"
+                    zf.writestr(png_path, png_bytes)
+                    
+                    # JPEG version
+                    jpeg_path = f"{folder_name}/002 Images/{m_number} - {img_num}.jpg"
+                    zf.writestr(jpeg_path, _png_to_jpeg(png_bytes))
+                
+                # Add master SVG to 001 Design/001 MASTER FILE
+                if include_master_svg:
+                    try:
+                        master_svg = generate_master_svg_for_product(product)
+                        svg_path = f"{folder_name}/001 Design/001 MASTER FILE/{m_number} MASTER FILE.svg"
+                        zf.writestr(svg_path, master_svg)
+                    except Exception as e:
+                        logging.warning(f"Could not generate master SVG for {m_number}: {e}")
+                
+                # Create empty placeholder folders
+                zf.writestr(f"{folder_name}/000 Archive/.gitkeep", "")
+                zf.writestr(f"{folder_name}/001 Design/000 Archive/.gitkeep", "")
+                zf.writestr(f"{folder_name}/001 Design/002 MUTOH/.gitkeep", "")
+                zf.writestr(f"{folder_name}/001 Design/003 MIMAKI/.gitkeep", "")
+                zf.writestr(f"{folder_name}/003 Blanks/.gitkeep", "")
+                zf.writestr(f"{folder_name}/004 SOPs/.gitkeep", "")
+                
+            except Exception as e:
+                logging.error(f"Failed to generate folder for {m_number}: {e}")
+                zf.writestr(f"{folder_name}/ERROR.txt", f"Failed to generate: {e}")
+    
+    zip_buffer.seek(0)
+    return zip_buffer.getvalue()
 
 
 def generate_images_zip(products: list[dict]) -> bytes:
     """
     Generate a ZIP file containing all product images organized by M Number.
+    Simple flat structure for quick downloads.
     
     Args:
         products: List of product dicts
@@ -28,37 +171,36 @@ def generate_images_zip(products: list[dict]) -> bytes:
                 images = generate_all_images_for_product(product)
                 
                 for img_type, png_bytes in images.items():
-                    # Add PNG to ZIP
                     zf.writestr(f"{m_number}/{m_number}_{img_type}.png", png_bytes)
-                    
-                    # Also add JPEG version
-                    from PIL import Image
-                    from io import BytesIO
-                    
-                    img = Image.open(BytesIO(png_bytes))
-                    if img.mode == "RGBA":
-                        background = Image.new("RGB", img.size, (255, 255, 255))
-                        background.paste(img, mask=img.split()[3])
-                        img = background
-                    elif img.mode != "RGB":
-                        img = img.convert("RGB")
-                    
-                    jpeg_buffer = BytesIO()
-                    img.save(jpeg_buffer, format="JPEG", quality=95)
-                    zf.writestr(f"{m_number}/{m_number}_{img_type}.jpg", jpeg_buffer.getvalue())
+                    zf.writestr(f"{m_number}/{m_number}_{img_type}.jpg", _png_to_jpeg(png_bytes))
                     
             except Exception as e:
                 logging.error(f"Failed to generate images for {m_number}: {e}")
-                # Add error file to ZIP
                 zf.writestr(f"{m_number}/ERROR.txt", f"Failed to generate images: {e}")
     
     zip_buffer.seek(0)
     return zip_buffer.getvalue()
 
 
-def generate_single_product_zip(product: dict) -> bytes:
+def generate_single_product_zip(product: dict, full_structure: bool = False) -> bytes:
     """
     Generate a ZIP file for a single product's images.
+    
+    Args:
+        product: Product dict
+        full_structure: If True, use full M Number folder structure for staff
+    
+    Returns:
+        ZIP file as bytes
+    """
+    if full_structure:
+        return generate_m_number_folder_zip([product])
+    return generate_images_zip([product])
+
+
+def generate_single_m_number_folder_zip(product: dict) -> bytes:
+    """
+    Generate a ZIP with full M Number folder structure for a single product.
     
     Args:
         product: Product dict
@@ -66,20 +208,31 @@ def generate_single_product_zip(product: dict) -> bytes:
     Returns:
         ZIP file as bytes
     """
-    return generate_images_zip([product])
+    return generate_m_number_folder_zip([product])
 
 
-def generate_images_zip_job(job: Job, products: list[dict]) -> bytes:
+def generate_images_zip_job(job: Job, products: list[dict], full_structure: bool = False) -> bytes:
     """
     Background job to generate images ZIP.
     
     Args:
         job: Job object for progress updates
         products: List of product dicts
+        full_structure: If True, use full M Number folder structure
     
     Returns:
         ZIP file as bytes
     """
+    if full_structure:
+        # Use full folder structure
+        job.total = len(products)
+        job.message = "Generating M Number folders..."
+        result = generate_m_number_folder_zip(products)
+        job.progress = job.total
+        job.message = f"Generated {len(products)} M Number folders"
+        return result
+    
+    # Simple flat structure
     job.total = len(products)
     zip_buffer = io.BytesIO()
     
@@ -94,22 +247,7 @@ def generate_images_zip_job(job: Job, products: list[dict]) -> bytes:
                 
                 for img_type, png_bytes in images.items():
                     zf.writestr(f"{m_number}/{m_number}_{img_type}.png", png_bytes)
-                    
-                    # Also add JPEG
-                    from PIL import Image
-                    from io import BytesIO
-                    
-                    img = Image.open(BytesIO(png_bytes))
-                    if img.mode == "RGBA":
-                        background = Image.new("RGB", img.size, (255, 255, 255))
-                        background.paste(img, mask=img.split()[3])
-                        img = background
-                    elif img.mode != "RGB":
-                        img = img.convert("RGB")
-                    
-                    jpeg_buffer = BytesIO()
-                    img.save(jpeg_buffer, format="JPEG", quality=95)
-                    zf.writestr(f"{m_number}/{m_number}_{img_type}.jpg", jpeg_buffer.getvalue())
+                    zf.writestr(f"{m_number}/{m_number}_{img_type}.jpg", _png_to_jpeg(png_bytes))
                     
             except Exception as e:
                 logging.error(f"Failed to generate images for {m_number}: {e}")

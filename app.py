@@ -255,8 +255,11 @@ HTML_TEMPLATE = '''
                 <h3>Image Downloads</h3>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                     <button class="btn btn-secondary" onclick="exportAllImages()">📦 Download All Images (ZIP)</button>
+                    <button class="btn btn-success" onclick="exportMNumberFolders()">📁 Download M Number Folders (Staff)</button>
                 </div>
-                <p style="margin-top: 10px; color: #888; font-size: 12px;">Individual product images can be downloaded from the Products tab.</p>
+                <p style="margin-top: 10px; color: #888; font-size: 12px;">
+                    M Number Folders include full directory structure (001 Design/001 MASTER FILE, 002 Images) for Google Drive.
+                </p>
                 
                 <div id="export-status" style="margin-top: 15px;"></div>
             </div>
@@ -378,11 +381,29 @@ HTML_TEMPLATE = '''
             const grid = document.getElementById('qa-grid');
             grid.innerHTML = products.map(p => `
                 <div class="product-card">
-                    <img src="/api/preview/${p.m_number}" alt="${p.m_number}">
+                    <img src="/api/preview/${p.m_number}?t=${Date.now()}" alt="${p.m_number}">
                     <div class="product-card-body">
                         <h3>${p.m_number}</h3>
                         <p class="product-meta">${p.description || ''}</p>
                         <p class="product-meta">${p.size} / ${p.color}</p>
+                        
+                        <div style="margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 6px;">
+                            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
+                                <label style="width: 80px; font-size: 12px;">Icon Scale:</label>
+                                <input type="range" min="0.5" max="1.5" step="0.05" value="${p.icon_scale || 1.0}" 
+                                    onchange="updateProductScale('${p.m_number}', this.value, document.getElementById('text-scale-${p.m_number}').value)"
+                                    style="flex: 1;">
+                                <span style="width: 40px; font-size: 12px;">${(p.icon_scale || 1.0).toFixed(2)}</span>
+                            </div>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <label style="width: 80px; font-size: 12px;">Text Scale:</label>
+                                <input type="range" id="text-scale-${p.m_number}" min="0.5" max="1.5" step="0.05" value="${p.text_scale || 1.0}"
+                                    onchange="updateProductScale('${p.m_number}', document.querySelector('[onchange*=\\'${p.m_number}\\']').value, this.value)"
+                                    style="flex: 1;">
+                                <span style="width: 40px; font-size: 12px;">${(p.text_scale || 1.0).toFixed(2)}</span>
+                            </div>
+                        </div>
+                        
                         <div class="actions">
                             <button class="btn btn-success" onclick="setQAStatus('${p.m_number}', 'approved')">✓ Approve</button>
                             <button class="btn btn-danger" onclick="setQAStatus('${p.m_number}', 'rejected')">✗ Reject</button>
@@ -630,6 +651,43 @@ HTML_TEMPLATE = '''
                 }
             } catch (e) {
                 status.innerHTML = `<div class="alert alert-error">Error: ${e.message}</div>`;
+            }
+        }
+        
+        async function exportMNumberFolders() {
+            const status = document.getElementById('export-status');
+            status.innerHTML = '<div class="alert alert-info">Generating M Number folders... This may take a while.</div>';
+            
+            try {
+                const resp = await fetch('/api/export/m-number-folders', {method: 'POST'});
+                if (resp.ok) {
+                    const blob = await resp.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `m_number_folders_${new Date().toISOString().slice(0,10)}.zip`;
+                    a.click();
+                    status.innerHTML = '<div class="alert alert-success">M Number folders downloaded!</div>';
+                } else {
+                    status.innerHTML = '<div class="alert alert-error">Failed to generate M Number folders</div>';
+                }
+            } catch (e) {
+                status.innerHTML = `<div class="alert alert-error">Error: ${e.message}</div>`;
+            }
+        }
+        
+        async function updateProductScale(mNumber, iconScale, textScale) {
+            try {
+                const resp = await fetch(`/api/products/${mNumber}/scale`, {
+                    method: 'PATCH',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({icon_scale: iconScale, text_scale: textScale})
+                });
+                if (resp.ok) {
+                    loadQAProducts();
+                }
+            } catch (e) {
+                console.error('Failed to update scale:', e);
             }
         }
         
@@ -937,6 +995,70 @@ def export_all_images():
         as_attachment=True,
         download_name=f'product_images_{datetime.now().strftime("%Y%m%d_%H%M")}.zip'
     )
+
+
+@app.route('/api/export/m-number-folders/<m_number>', methods=['GET'])
+def export_m_number_folder(m_number):
+    """Download M Number folder with full structure for staff (single product)."""
+    from export_images import generate_single_m_number_folder_zip
+    from io import BytesIO
+    
+    product = Product.get(m_number)
+    if not product:
+        return jsonify({"error": "Product not found"}), 404
+    
+    zip_bytes = generate_single_m_number_folder_zip(product)
+    
+    return send_file(
+        BytesIO(zip_bytes),
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f'{m_number}_folder.zip'
+    )
+
+
+@app.route('/api/export/m-number-folders', methods=['POST'])
+def export_all_m_number_folders():
+    """Download all M Number folders with full structure for staff."""
+    from export_images import generate_m_number_folder_zip
+    from io import BytesIO
+    
+    products = Product.approved()
+    if not products:
+        products = Product.all()
+    
+    if not products:
+        return jsonify({"error": "No products to export"}), 400
+    
+    zip_bytes = generate_m_number_folder_zip(products)
+    
+    return send_file(
+        BytesIO(zip_bytes),
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f'm_number_folders_{datetime.now().strftime("%Y%m%d_%H%M")}.zip'
+    )
+
+
+@app.route('/api/products/<m_number>/scale', methods=['PATCH'])
+def update_product_scale(m_number):
+    """Update icon_scale and text_scale for a product (QA tuning)."""
+    data = request.json
+    
+    product = Product.get(m_number)
+    if not product:
+        return jsonify({"error": "Product not found"}), 404
+    
+    updates = {}
+    if 'icon_scale' in data:
+        updates['icon_scale'] = float(data['icon_scale'])
+    if 'text_scale' in data:
+        updates['text_scale'] = float(data['text_scale'])
+    
+    if updates:
+        Product.update(m_number, updates)
+    
+    return jsonify({"success": True, "updates": updates})
 
 
 if __name__ == '__main__':
