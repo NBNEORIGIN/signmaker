@@ -553,7 +553,7 @@ def generate_transparent_product_image(product: dict) -> bytes:
     
     # Render to PNG with transparency
     svg_content = etree.tostring(root, encoding="unicode")
-    png_bytes = render_svg_to_bytes(svg_content, scale=4)
+    png_bytes = render_svg_to_bytes(svg_content, scale=4, transparent=True)
     
     return png_bytes
 

@@ -28,7 +28,7 @@ def _ensure_browser():
     return _browser
 
 
-def _render_svg_impl(svg_content: str, scale: int) -> bytes:
+def _render_svg_impl(svg_content: str, scale: int, transparent: bool = False) -> bytes:
     """Internal render function - runs on executor thread."""
     browser = _ensure_browser()
     context = browser.new_context(device_scale_factor=scale)
@@ -41,7 +41,7 @@ def _render_svg_impl(svg_content: str, scale: int) -> bytes:
     try:
         page.goto(f'file:///{temp_svg.as_posix()}')
         svg_element = page.locator('svg')
-        png_bytes = svg_element.screenshot(type='png')
+        png_bytes = svg_element.screenshot(type='png', omit_background=transparent)
     finally:
         page.close()
         context.close()
@@ -120,18 +120,19 @@ def render_svg_file_to_png(svg_path: Path, output_path: Path, scale: int = 4) ->
     return output_path
 
 
-def render_svg_to_bytes(svg_content: str, scale: int = 4) -> bytes:
+def render_svg_to_bytes(svg_content: str, scale: int = 4, transparent: bool = False) -> bytes:
     """
     Render SVG content to PNG bytes (thread-safe, for streaming/API responses).
     
     Args:
         svg_content: SVG XML string
         scale: Device scale factor
+        transparent: If True, omit background for transparency
     
     Returns:
         PNG image as bytes
     """
-    return _executor.submit(_render_svg_impl, svg_content, scale).result(timeout=60)
+    return _executor.submit(_render_svg_impl, svg_content, scale, transparent).result(timeout=60)
 
 
 if __name__ == "__main__":
