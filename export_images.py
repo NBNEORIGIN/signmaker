@@ -134,11 +134,16 @@ def generate_m_number_folder_zip(products: list[dict], include_master_svg: bool 
                     except Exception as e:
                         logging.warning(f"Could not generate master SVG for {m_number}: {e}")
                 
-                # Create empty placeholder folders
+                # Create empty placeholder folders (matching original structure)
                 zf.writestr(f"{folder_name}/000 Archive/.gitkeep", "")
                 zf.writestr(f"{folder_name}/001 Design/000 Archive/.gitkeep", "")
                 zf.writestr(f"{folder_name}/001 Design/002 MUTOH/.gitkeep", "")
                 zf.writestr(f"{folder_name}/001 Design/003 MIMAKI/.gitkeep", "")
+                zf.writestr(f"{folder_name}/001 Design/004 ROLAND/.gitkeep", "")
+                zf.writestr(f"{folder_name}/001 Design/005 IMAGE GENERATION/.gitkeep", "")
+                zf.writestr(f"{folder_name}/001 Design/006 HULK/.gitkeep", "")
+                zf.writestr(f"{folder_name}/001 Design/007 EPSON/.gitkeep", "")
+                zf.writestr(f"{folder_name}/001 Design/008 ROLF/.gitkeep", "")
                 zf.writestr(f"{folder_name}/003 Blanks/.gitkeep", "")
                 zf.writestr(f"{folder_name}/004 SOPs/.gitkeep", "")
                 

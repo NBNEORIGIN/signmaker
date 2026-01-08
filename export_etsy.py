@@ -118,23 +118,25 @@ Ideal for private driveways, residential property entrances, business areas, and
                     img_url = f"{r2_public_url}/{m_number}%20-%20{img_num:03d}.jpg"
                     images.append(img_url)
             
-            # Generate tags (max 13)
-            base_desc = desc.lower()
+            # Generate tags (max 13 tags, each max 20 chars)
+            base_desc = desc.lower()[:20]  # Truncate to 20 chars
             tags = [
-                base_desc.replace(" ", " "),
+                base_desc[:20],
                 "sign",
-                "aluminium sign",
+                "aluminium",
                 "safety sign",
-                f"{color_display.lower()} sign",
-                "office sign",
+                f"{color_display.lower()}",
+                "office",
                 "weatherproof",
                 "self adhesive",
-                "uk sign",
-                "property sign",
-                "warning sign",
-                "metal sign",
-                "professional sign"
+                "uk",
+                "property",
+                "warning",
+                "metal",
+                "professional"
             ]
+            # Ensure all tags are max 20 chars
+            tags = [t[:20] for t in tags]
             
             row_data = {
                 "listing_id": "",

@@ -411,12 +411,13 @@ def create_ebay_listing(products: list[dict], policy_ids: dict, promote: bool = 
         # Build title
         title = f"{product.get('description', 'Sign')} - {size_name} Aluminium"[:80]
         
-        # Image URLs (from R2)
+        # Image URLs (from R2) - format: M1288%20-%20001.jpg
         r2_url = os.environ.get("R2_PUBLIC_URL", "")
         image_urls = []
         if r2_url:
-            for img_type in ["main", "dimensions", "peel_and_stick", "rear"]:
-                image_urls.append(f"{r2_url}/{sku}/{sku}_{img_type}.jpg")
+            for img_num in ["001", "002", "003", "004"]:
+                # URL encode the space in filename
+                image_urls.append(f"{r2_url}/{sku}%20-%20{img_num}.jpg")
         
         if dry_run:
             logging.info("[DRY RUN] Would create inventory item: %s (%s, %s) at £%.2f", sku, size_name, color_name, price)
