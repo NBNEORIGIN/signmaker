@@ -1,0 +1,195 @@
+"""Database models for SignMaker."""
+import os
+from datetime import datetime
+from pathlib import Path
+
+# Use SQLite for local dev, PostgreSQL for production
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
+if DATABASE_URL.startswith("postgres"):
+    # PostgreSQL (Render)
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    
+    def get_db():
+        conn = psycopg2.connect(DATABASE_URL)
+        conn.autocommit = True
+        return conn
+    
+    def dict_cursor(conn):
+        return conn.cursor(cursor_factory=RealDictCursor)
+else:
+    # SQLite (local development)
+    import sqlite3
+    
+    DB_PATH = Path(__file__).parent / "signmaker.db"
+    
+    def get_db():
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        return conn
+    
+    def dict_cursor(conn):
+        return conn.cursor()
+
+
+def init_db():
+    """Initialize database tables."""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    # Use SERIAL for PostgreSQL, INTEGER PRIMARY KEY for SQLite
+    is_postgres = DATABASE_URL.startswith("postgres")
+    id_type = "SERIAL PRIMARY KEY" if is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
+    
+    # Products table
+    cur.execute(f"""
+        CREATE TABLE IF NOT EXISTS products (
+            id {id_type},
+            m_number TEXT UNIQUE NOT NULL,
+            description TEXT,
+            size TEXT,
+            color TEXT,
+            layout_mode TEXT DEFAULT 'A',
+            icon_files TEXT,
+            text_line_1 TEXT,
+            text_line_2 TEXT,
+            text_line_3 TEXT,
+            orientation TEXT DEFAULT 'landscape',
+            font TEXT DEFAULT 'arial_heavy',
+            material TEXT DEFAULT '1mm_aluminium',
+            mounting_type TEXT DEFAULT 'self_adhesive',
+            ean TEXT,
+            qa_status TEXT DEFAULT 'pending',
+            qa_comment TEXT,
+            icon_scale REAL DEFAULT 1.0,
+            text_scale REAL DEFAULT 1.0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Generated content table
+    cur.execute(f"""
+        CREATE TABLE IF NOT EXISTS product_content (
+            id {id_type},
+            product_id INTEGER REFERENCES products(id),
+            title TEXT,
+            description TEXT,
+            bullet_points TEXT,
+            search_terms TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Image URLs table
+    cur.execute(f"""
+        CREATE TABLE IF NOT EXISTS product_images (
+            id {id_type},
+            product_id INTEGER REFERENCES products(id),
+            image_type TEXT,
+            url TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Batches/Jobs table (for tracking pipeline runs)
+    cur.execute(f"""
+        CREATE TABLE IF NOT EXISTS batches (
+            id {id_type},
+            name TEXT,
+            status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP
+        )
+    """)
+    
+    conn.commit()
+    conn.close()
+
+
+class Product:
+    """Product model."""
+    
+    @staticmethod
+    def _ensure_ean_string(product_dict):
+        """Ensure EAN is always a string (not scientific notation)."""
+        if product_dict and product_dict.get('ean'):
+            product_dict['ean'] = str(product_dict['ean'])
+        return product_dict
+    
+    @staticmethod
+    def all():
+        conn = get_db()
+        cur = dict_cursor(conn)
+        cur.execute("SELECT * FROM products ORDER BY m_number")
+        rows = cur.fetchall()
+        conn.close()
+        return [Product._ensure_ean_string(dict(row)) for row in rows]
+    
+    @staticmethod
+    def get(m_number):
+        conn = get_db()
+        cur = dict_cursor(conn)
+        cur.execute("SELECT * FROM products WHERE m_number = ?", (m_number,))
+        row = cur.fetchone()
+        conn.close()
+        return Product._ensure_ean_string(dict(row)) if row else None
+    
+    @staticmethod
+    def approved():
+        conn = get_db()
+        cur = dict_cursor(conn)
+        cur.execute("SELECT * FROM products WHERE qa_status = 'approved' ORDER BY m_number")
+        rows = cur.fetchall()
+        conn.close()
+        return [Product._ensure_ean_string(dict(row)) for row in rows]
+    
+    @staticmethod
+    def create(data):
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO products (m_number, description, size, color, layout_mode, 
+                icon_files, text_line_1, text_line_2, text_line_3, orientation,
+                font, material, mounting_type, ean, qa_status, icon_scale, text_scale)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            data.get('m_number'), data.get('description'), data.get('size'),
+            data.get('color'), data.get('layout_mode', 'A'), data.get('icon_files'),
+            data.get('text_line_1'), data.get('text_line_2'), data.get('text_line_3'),
+            data.get('orientation', 'landscape'), data.get('font', 'arial_heavy'),
+            data.get('material', '1mm_aluminium'), data.get('mounting_type', 'self_adhesive'),
+            data.get('ean'), data.get('qa_status', 'pending'),
+            data.get('icon_scale', 1.0), data.get('text_scale', 1.0)
+        ))
+        conn.commit()
+        conn.close()
+    
+    @staticmethod
+    def update(m_number, data):
+        conn = get_db()
+        cur = conn.cursor()
+        fields = []
+        values = []
+        for key, value in data.items():
+            if key != 'm_number':
+                fields.append(f"{key} = ?")
+                values.append(value)
+        values.append(m_number)
+        cur.execute(f"UPDATE products SET {', '.join(fields)}, updated_at = CURRENT_TIMESTAMP WHERE m_number = ?", values)
+        conn.commit()
+        conn.close()
+    
+    @staticmethod
+    def delete(m_number):
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM products WHERE m_number = ?", (m_number,))
+        conn.commit()
+        conn.close()
+
+
+if __name__ == "__main__":
+    init_db()
+    print("Database initialized.")

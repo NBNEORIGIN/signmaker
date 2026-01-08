@@ -1,0 +1,151 @@
+"""SVG to PNG renderer using Playwright (headless Chromium).
+
+Thread-safe implementation using a dedicated rendering thread.
+All Playwright operations run on a single thread to avoid cross-thread issues.
+"""
+import tempfile
+import threading
+import queue
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, Future
+from playwright.sync_api import sync_playwright
+
+# Single-threaded executor for all Playwright operations
+_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="playwright")
+_browser = None
+_playwright_instance = None
+_initialized = False
+_init_lock = threading.Lock()
+
+
+def _ensure_browser():
+    """Ensure browser is initialized (called within executor thread)."""
+    global _browser, _playwright_instance, _initialized
+    if not _initialized:
+        _playwright_instance = sync_playwright().start()
+        _browser = _playwright_instance.chromium.launch()
+        _initialized = True
+    return _browser
+
+
+def _render_svg_impl(svg_content: str, scale: int) -> bytes:
+    """Internal render function - runs on executor thread."""
+    browser = _ensure_browser()
+    context = browser.new_context(device_scale_factor=scale)
+    page = context.new_page()
+    
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.svg', delete=False, encoding='utf-8') as f:
+        f.write(svg_content)
+        temp_svg = Path(f.name)
+    
+    try:
+        page.goto(f'file:///{temp_svg.as_posix()}')
+        svg_element = page.locator('svg')
+        png_bytes = svg_element.screenshot(type='png')
+    finally:
+        page.close()
+        context.close()
+        temp_svg.unlink(missing_ok=True)
+    
+    return png_bytes
+
+
+def _render_svg_file_impl(svg_path: Path, scale: int) -> bytes:
+    """Internal file render function - runs on executor thread."""
+    browser = _ensure_browser()
+    context = browser.new_context(device_scale_factor=scale)
+    page = context.new_page()
+    
+    try:
+        page.goto(f'file:///{svg_path.as_posix()}')
+        svg_element = page.locator('svg')
+        png_bytes = svg_element.screenshot(type='png')
+    finally:
+        page.close()
+        context.close()
+    
+    return png_bytes
+
+
+def close_browser():
+    """Close browser and shutdown executor."""
+    global _browser, _playwright_instance, _initialized
+    
+    def _shutdown():
+        global _browser, _playwright_instance, _initialized
+        if _browser:
+            _browser.close()
+            _browser = None
+        if _playwright_instance:
+            _playwright_instance.stop()
+            _playwright_instance = None
+        _initialized = False
+    
+    _executor.submit(_shutdown).result(timeout=10)
+
+
+def render_svg_to_png(svg_content: str, output_path: Path, scale: int = 4) -> Path:
+    """
+    Render SVG content to PNG using Playwright (thread-safe).
+    
+    Args:
+        svg_content: SVG XML string
+        output_path: Output PNG file path
+        scale: Device scale factor (4 = ~2000px output for 500px SVG)
+    
+    Returns:
+        Path to output PNG file
+    """
+    png_bytes = _executor.submit(_render_svg_impl, svg_content, scale).result(timeout=60)
+    with open(output_path, 'wb') as f:
+        f.write(png_bytes)
+    return output_path
+
+
+def render_svg_file_to_png(svg_path: Path, output_path: Path, scale: int = 4) -> Path:
+    """
+    Render SVG file to PNG using Playwright (thread-safe).
+    
+    Args:
+        svg_path: Input SVG file path
+        output_path: Output PNG file path
+        scale: Device scale factor (4 = ~2000px output for 500px SVG)
+    
+    Returns:
+        Path to output PNG file
+    """
+    png_bytes = _executor.submit(_render_svg_file_impl, svg_path, scale).result(timeout=60)
+    with open(output_path, 'wb') as f:
+        f.write(png_bytes)
+    return output_path
+
+
+def render_svg_to_bytes(svg_content: str, scale: int = 4) -> bytes:
+    """
+    Render SVG content to PNG bytes (thread-safe, for streaming/API responses).
+    
+    Args:
+        svg_content: SVG XML string
+        scale: Device scale factor
+    
+    Returns:
+        PNG image as bytes
+    """
+    return _executor.submit(_render_svg_impl, svg_content, scale).result(timeout=60)
+
+
+if __name__ == "__main__":
+    # Test rendering
+    test_svg = """<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">
+        <defs>
+            <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="4" dy="4" stdDeviation="4" flood-opacity="0.5"/>
+            </filter>
+        </defs>
+        <circle cx="100" cy="100" r="80" fill="#4CAF50" filter="url(#shadow)"/>
+    </svg>"""
+    
+    output = Path("test_render.png")
+    render_svg_to_png(test_svg, output)
+    print(f"Rendered to {output} ({output.stat().st_size} bytes)")
+    close_browser()
