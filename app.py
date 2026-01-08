@@ -210,7 +210,11 @@ HTML_TEMPLATE = '''
         <div id="qa-panel" class="panel">
             <div class="card">
                 <h2>QA Review</h2>
-                <button class="btn btn-secondary" onclick="loadQAProducts()">↻ Refresh</button>
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
+                    <button class="btn btn-secondary" onclick="loadQAProducts()">↻ Refresh</button>
+                    <button class="btn btn-primary" onclick="generateAllLifestyles()">🎨 Generate All Lifestyle Images</button>
+                    <span id="lifestyle-status" style="font-size: 12px; color: #666;"></span>
+                </div>
                 <div id="qa-grid" class="product-grid" style="margin-top: 20px;"></div>
             </div>
         </div>
@@ -390,7 +394,11 @@ HTML_TEMPLATE = '''
         function renderQAGrid() {
             const grid = document.getElementById('qa-grid');
             // Group products by size and description to show variants together
-            const silverProducts = products.filter(p => p.color === 'silver');
+            // Order: saville, dracula first (top row), then baby_jesus, dick (bottom row)
+            const sizeOrder = ['saville', 'dracula', 'barzan', 'baby_jesus', 'dick'];
+            const silverProducts = products
+                .filter(p => p.color === 'silver')
+                .sort((a, b) => sizeOrder.indexOf(a.size) - sizeOrder.indexOf(b.size));
             
             grid.innerHTML = silverProducts.map(p => {
                 // Find gold and white variants
@@ -1000,6 +1008,32 @@ HTML_TEMPLATE = '''
             }
         }
         
+        async function generateAllLifestyles() {
+            const status = document.getElementById('lifestyle-status');
+            status.textContent = 'Generating lifestyle images for all products...';
+            
+            try {
+                const resp = await fetch('/api/generate/lifestyle-batch', {method: 'POST'});
+                const data = await resp.json();
+                
+                if (data.success) {
+                    status.textContent = `Generated ${data.count} lifestyle images!`;
+                    // Update all lifestyle containers with the generated images
+                    for (const [mNumber, imageUrl] of Object.entries(data.images)) {
+                        const container = document.getElementById(`lifestyle-${mNumber}`);
+                        if (container && imageUrl) {
+                            container.innerHTML = `<img src="${imageUrl}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 4px;">`;
+                        }
+                    }
+                } else {
+                    status.textContent = `Error: ${data.error}`;
+                }
+            } catch (e) {
+                status.textContent = 'Error generating lifestyle images';
+                console.error('Failed to generate batch lifestyle:', e);
+            }
+        }
+        
         // Load products on page load
         loadProducts();
     </script>
@@ -1354,7 +1388,7 @@ def generate_lifestyle_single(m_number):
     """Generate AI lifestyle image for a single product using DALL-E 3."""
     import os
     from generate_lifestyle_images import composite_product_on_background, get_scene_prompt
-    from image_generator import generate_product_image
+    from image_generator import generate_transparent_product_image
     from PIL import Image
     import io
     import base64
@@ -1368,9 +1402,13 @@ def generate_lifestyle_single(m_number):
         return jsonify({"success": False, "error": "Product not found"}), 404
     
     try:
-        # Generate main product image
-        png_bytes = generate_product_image(product, "main")
+        # Generate transparent product image for compositing
+        png_bytes = generate_transparent_product_image(product)
         product_img = Image.open(io.BytesIO(png_bytes))
+        
+        # Ensure RGBA mode for transparency
+        if product_img.mode != 'RGBA':
+            product_img = product_img.convert('RGBA')
         
         # Get scene prompt based on description
         sign_text = product.get("description", "") or product.get("text_line_1", "") or "Sign"
@@ -1404,7 +1442,7 @@ Professional product photography style, high quality, 4K resolution."""
         
         background = Image.open(io.BytesIO(background_data))
         
-        # Composite product onto background
+        # Composite product onto background (transparency preserved)
         lifestyle = composite_product_on_background(product_img, background)
         
         # Convert to base64 data URL for inline display
@@ -1419,6 +1457,88 @@ Professional product photography style, high quality, 4K resolution."""
         
     except Exception as e:
         logging.error(f"Failed to generate lifestyle for {m_number}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# Store the last generated background for batch use
+_cached_lifestyle_background = None
+
+@app.route('/api/generate/lifestyle-batch', methods=['POST'])
+def generate_lifestyle_batch():
+    """Generate lifestyle images for all silver products using a single shared background."""
+    import os
+    from generate_lifestyle_images import composite_product_on_background, get_scene_prompt
+    from image_generator import generate_transparent_product_image
+    from PIL import Image
+    import io
+    import base64
+    global _cached_lifestyle_background
+    
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return jsonify({"success": False, "error": "OPENAI_API_KEY not set"}), 400
+    
+    silver_products = [p for p in Product.all() if p.get('color') == 'silver']
+    if not silver_products:
+        return jsonify({"success": False, "error": "No silver products found"}), 400
+    
+    try:
+        # Generate one background for all products
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        
+        prompt = """A professional office or commercial building wall, clean painted surface, good lighting, modern interior design, photorealistic.
+
+The image should have a clear, well-lit wall or door surface where a small rectangular sign could be mounted. 
+Leave a visible flat area (about 15-20% of the image) on a wall or door that would be suitable for mounting a sign.
+The area should be at eye level, well-lit, and clearly visible.
+Professional product photography style, high quality, 4K resolution."""
+
+        response = client.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            size="1024x1024",
+            quality="standard",
+            n=1,
+        )
+        
+        image_url = response.data[0].url
+        
+        import urllib.request
+        with urllib.request.urlopen(image_url) as resp_data:
+            background_data = resp_data.read()
+        
+        background = Image.open(io.BytesIO(background_data))
+        _cached_lifestyle_background = background.copy()
+        
+        # Generate lifestyle for each silver product
+        results = {}
+        for product in silver_products:
+            try:
+                png_bytes = generate_transparent_product_image(product)
+                product_img = Image.open(io.BytesIO(png_bytes))
+                if product_img.mode != 'RGBA':
+                    product_img = product_img.convert('RGBA')
+                
+                lifestyle = composite_product_on_background(product_img, background.copy())
+                
+                buffer = io.BytesIO()
+                lifestyle.save(buffer, format="PNG")
+                img_base64 = base64.b64encode(buffer.getvalue()).decode()
+                
+                results[product['m_number']] = f"data:image/png;base64,{img_base64}"
+            except Exception as e:
+                logging.error(f"Failed lifestyle for {product['m_number']}: {e}")
+                results[product['m_number']] = None
+        
+        return jsonify({
+            "success": True,
+            "images": results,
+            "count": len([v for v in results.values() if v])
+        })
+        
+    except Exception as e:
+        logging.error(f"Failed batch lifestyle generation: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 

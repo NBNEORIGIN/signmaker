@@ -433,6 +433,130 @@ def generate_product_image(product: dict, template_type: str = "main") -> bytes:
     return png_bytes
 
 
+def generate_transparent_product_image(product: dict) -> bytes:
+    """
+    Generate a transparent PNG of just the sign (no template background).
+    Used for lifestyle image compositing.
+    
+    Args:
+        product: Product dict from database
+    
+    Returns:
+        PNG image with transparency as bytes
+    """
+    size = product.get("size", "saville").lower()
+    color = product.get("color", "silver").lower()
+    orientation = product.get("orientation", "landscape").lower()
+    layout_mode = product.get("layout_mode", "A").upper()
+    icon_files = (product.get("icon_files") or "").split(",")
+    icon_files = [f.strip() for f in icon_files if f.strip()]
+    
+    text_lines = [
+        product.get("text_line_1", ""),
+        product.get("text_line_2", ""),
+        product.get("text_line_3", ""),
+    ]
+    
+    icon_scale = float(product.get("icon_scale", 1.0) or 1.0)
+    text_scale = float(product.get("text_scale", 1.0) or 1.0)
+    icon_offset_x = float(product.get("icon_offset_x", 0.0) or 0.0)
+    icon_offset_y = float(product.get("icon_offset_y", 0.0) or 0.0)
+    font = product.get("font", "arial_heavy")
+    
+    # Get sign dimensions
+    width_mm, height_mm, is_circular = SIZES.get(size, (115, 95, False))
+    if size in ("dick", "baby_jesus") and orientation == "portrait":
+        width_mm, height_mm = height_mm, width_mm
+    
+    # Create a standalone SVG with just the sign shape and content
+    svg_width = width_mm
+    svg_height = height_mm
+    
+    # Create SVG root
+    root = etree.Element(f"{{{SVG_NS}}}svg", nsmap=NSMAP)
+    root.set("width", f"{svg_width}mm")
+    root.set("height", f"{svg_height}mm")
+    root.set("viewBox", f"0 0 {svg_width} {svg_height}")
+    
+    # Add sign background shape
+    if is_circular:
+        # Circular sign (dracula)
+        cx = svg_width / 2
+        cy = svg_height / 2
+        r = min(svg_width, svg_height) / 2 - 2
+        circle = etree.SubElement(root, f"{{{SVG_NS}}}circle")
+        circle.set("cx", str(cx))
+        circle.set("cy", str(cy))
+        circle.set("r", str(r))
+        if color == "silver":
+            circle.set("fill", "#C0C0C0")
+        elif color == "gold":
+            circle.set("fill", "#D4AF37")
+        else:
+            circle.set("fill", "#FFFFFF")
+        circle.set("stroke", "#888888")
+        circle.set("stroke-width", "1")
+    else:
+        # Rectangular sign with rounded corners
+        rect = etree.SubElement(root, f"{{{SVG_NS}}}rect")
+        rect.set("x", "2")
+        rect.set("y", "2")
+        rect.set("width", str(svg_width - 4))
+        rect.set("height", str(svg_height - 4))
+        rect.set("rx", "5")
+        rect.set("ry", "5")
+        if color == "silver":
+            rect.set("fill", "#C0C0C0")
+        elif color == "gold":
+            rect.set("fill", "#D4AF37")
+        else:
+            rect.set("fill", "#FFFFFF")
+        rect.set("stroke", "#888888")
+        rect.set("stroke-width", "1")
+    
+    # Calculate layout for icons and text
+    bounds = SignBounds(
+        inner_x=5,
+        inner_y=5,
+        inner_width=svg_width - 10,
+        inner_height=svg_height - 10,
+        center_x=svg_width / 2,
+        center_y=svg_height / 2,
+    )
+    
+    layout = _calculate_layout(
+        bounds, layout_mode, len(icon_files), text_lines,
+        icon_scale, text_scale, size, orientation
+    )
+    
+    # Apply QA position offsets
+    final_icon_x = layout.icon_x + icon_offset_x
+    final_icon_y = layout.icon_y + icon_offset_y
+    
+    # Inject icons
+    for icon_file in icon_files:
+        icon_type, icon_data = _load_icon(icon_file)
+        if icon_type == "svg":
+            _inject_icon(root, icon_data, final_icon_x, final_icon_y, layout.icon_width, layout.icon_height)
+        elif icon_type == "png":
+            _inject_png_icon(root, icon_data, final_icon_x, final_icon_y, layout.icon_width, layout.icon_height)
+    
+    # Add text elements
+    font_family, font_weight = FONTS.get(font, ("Arial", "bold"))
+    for text_elem in layout.text_elements:
+        _add_text_element(
+            root, text_elem["text"], text_elem["x"], text_elem["y"],
+            text_elem["font_size"], text_elem.get("anchor", "middle"),
+            font_family, font_weight
+        )
+    
+    # Render to PNG with transparency
+    svg_content = etree.tostring(root, encoding="unicode")
+    png_bytes = render_svg_to_bytes(svg_content, scale=4)
+    
+    return png_bytes
+
+
 def generate_all_images_for_product(product: dict) -> dict[str, bytes]:
     """Generate all image types for a product."""
     images = {}
