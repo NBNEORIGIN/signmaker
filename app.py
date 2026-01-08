@@ -1433,10 +1433,11 @@ def generate_lifestyle_single(m_number):
     """Generate AI lifestyle image for a single product using DALL-E 3."""
     import os
     from generate_lifestyle_images import composite_product_on_background, get_scene_prompt
-    from image_generator import generate_transparent_product_image
+    from image_generator import generate_product_image
     from PIL import Image
     import io
     import base64
+    import logging
     
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
@@ -1447,13 +1448,21 @@ def generate_lifestyle_single(m_number):
         return jsonify({"success": False, "error": "Product not found"}), 404
     
     try:
-        # Generate transparent product image for compositing
-        png_bytes = generate_transparent_product_image(product)
+        # Generate main product image and extract just the sign with transparency
+        png_bytes = generate_product_image(product, "main")
         product_img = Image.open(io.BytesIO(png_bytes))
         
-        # Ensure RGBA mode for transparency
-        if product_img.mode != 'RGBA':
-            product_img = product_img.convert('RGBA')
+        # Convert to RGBA and make the white/light gray template background transparent
+        product_img = product_img.convert('RGBA')
+        datas = product_img.getdata()
+        new_data = []
+        for item in datas:
+            # Make light gray/white background transparent (template background color)
+            if item[0] > 240 and item[1] > 240 and item[2] > 240:
+                new_data.append((255, 255, 255, 0))
+            else:
+                new_data.append(item)
+        product_img.putdata(new_data)
         
         # Get scene prompt based on description
         sign_text = product.get("description", "") or product.get("text_line_1", "") or "Sign"
@@ -1513,10 +1522,11 @@ def generate_lifestyle_batch():
     """Generate lifestyle images for all silver products using a single shared background."""
     import os
     from generate_lifestyle_images import composite_product_on_background, get_scene_prompt
-    from image_generator import generate_transparent_product_image
+    from image_generator import generate_product_image
     from PIL import Image
     import io
     import base64
+    import logging
     global _cached_lifestyle_background
     
     api_key = os.environ.get("OPENAI_API_KEY")
@@ -1560,10 +1570,18 @@ Professional product photography style, high quality, 4K resolution."""
         results = {}
         for product in silver_products:
             try:
-                png_bytes = generate_transparent_product_image(product)
+                # Generate main product image and make background transparent
+                png_bytes = generate_product_image(product, "main")
                 product_img = Image.open(io.BytesIO(png_bytes))
-                if product_img.mode != 'RGBA':
-                    product_img = product_img.convert('RGBA')
+                product_img = product_img.convert('RGBA')
+                datas = product_img.getdata()
+                new_data = []
+                for item in datas:
+                    if item[0] > 240 and item[1] > 240 and item[2] > 240:
+                        new_data.append((255, 255, 255, 0))
+                    else:
+                        new_data.append(item)
+                product_img.putdata(new_data)
                 
                 lifestyle = composite_product_on_background(product_img, background.copy())
                 
