@@ -1402,7 +1402,7 @@ def get_job_status(job_id):
 
 @app.route('/api/generate/content', methods=['POST'])
 def generate_content():
-    """Generate AI content for products using Claude with sample images."""
+    """Generate AI content for products using OpenAI GPT-4 with sample images."""
     import os
     import base64
     import logging
@@ -1414,17 +1414,17 @@ def generate_content():
     system_prompt = data.get('system_prompt', '')
     sample_m_numbers = data.get('sample_m_numbers', [])
     
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
-        return jsonify({"success": False, "error": "ANTHROPIC_API_KEY not set"}), 400
+        return jsonify({"success": False, "error": "OPENAI_API_KEY not set"}), 400
     
     all_products = Product.all()
     if not all_products:
         return jsonify({"success": False, "error": "No products found"}), 400
     
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
         
         # Build product summary
         sizes = {}
@@ -1455,7 +1455,7 @@ def generate_content():
             summary += f"  - {size}: {count} products - {dims}\n"
         summary += f"Product Types: {len(descriptions)} unique designs"
         
-        # Build message content with images
+        # Build message content with images for GPT-4 Vision
         content = []
         
         # Add sample images
@@ -1466,11 +1466,9 @@ def generate_content():
                     png_bytes = generate_product_image(product, "main")
                     img_base64 = base64.b64encode(png_bytes).decode()
                     content.append({
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/png",
-                            "data": img_base64
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{img_base64}"
                         }
                     })
                     logging.info(f"Added sample image for {m_number}")
@@ -1494,15 +1492,17 @@ Remember: These products come in MULTIPLE sizes and shapes as shown in the image
 
         content.append({"type": "text", "text": user_prompt})
         
-        # Call Claude API
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+        # Call OpenAI GPT-4 Vision API
+        response = client.chat.completions.create(
+            model="gpt-4o",
             max_tokens=4096,
-            system=system_prompt or "You are an expert product content writer for Amazon marketplace listings.",
-            messages=[{"role": "user", "content": content}]
+            messages=[
+                {"role": "system", "content": system_prompt or "You are an expert product content writer for Amazon marketplace listings."},
+                {"role": "user", "content": content}
+            ]
         )
         
-        generated_content = response.content[0].text
+        generated_content = response.choices[0].message.content
         
         return jsonify({
             "success": True,
