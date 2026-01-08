@@ -246,31 +246,54 @@ HTML_TEMPLATE = '''
                     </div>
                 </div>
                 
-                <!-- Step 3: AI Prompt Configuration -->
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Product Theme (for AI)</label>
-                        <textarea id="theme" rows="3" placeholder="Describe the sign type..."></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>Target Use Cases</label>
-                        <textarea id="use-cases" rows="3" placeholder="Where will this sign be used?"></textarea>
+                <!-- Step 3: AI Analysis - Auto-populate fields -->
+                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <h3 style="margin: 0 0 10px 0;">🤖 Step 1: Analyze Products</h3>
+                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                        Click to have AI analyze the sample images and auto-populate the fields below.
+                    </p>
+                    <button class="btn btn-warning" onclick="analyzeProducts()" id="btn-analyze">🔍 Analyze Products with AI</button>
+                    <span id="analyze-status" style="margin-left: 10px; font-size: 12px;"></span>
+                </div>
+                
+                <!-- Step 4: Editable fields (populated by AI, editable by human) -->
+                <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <h3 style="margin: 0 0 10px 0;">✏️ Step 2: Review & Edit</h3>
+                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                        Review and edit the AI-generated descriptions before generating content.
+                    </p>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Product Theme (for AI)</label>
+                            <textarea id="theme" rows="3" placeholder="Click 'Analyze Products' to auto-populate..."></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Target Use Cases</label>
+                            <textarea id="use-cases" rows="3" placeholder="Click 'Analyze Products' to auto-populate..."></textarea>
+                        </div>
                     </div>
                 </div>
                 
-                <!-- Step 4: AI System Prompt (editable) -->
-                <div class="form-group" style="margin-top: 15px;">
-                    <label>AI System Prompt (editable)</label>
-                    <textarea id="ai-system-prompt" rows="6" style="font-family: monospace; font-size: 11px;"></textarea>
-                    <button class="btn btn-secondary" onclick="resetSystemPrompt()" style="margin-top: 5px; font-size: 11px;">Reset to Default</button>
-                </div>
+                <!-- Step 5: AI System Prompt (editable, collapsed by default) -->
+                <details style="margin-top: 15px;">
+                    <summary style="cursor: pointer; font-weight: bold;">⚙️ Advanced: AI System Prompt (click to expand)</summary>
+                    <div class="form-group" style="margin-top: 10px;">
+                        <textarea id="ai-system-prompt" rows="6" style="font-family: monospace; font-size: 11px;"></textarea>
+                        <button class="btn btn-secondary" onclick="resetSystemPrompt()" style="margin-top: 5px; font-size: 11px;">Reset to Default</button>
+                    </div>
+                </details>
                 
-                <!-- Action Buttons -->
-                <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
-                    <button class="btn btn-secondary" onclick="previewAIPrompt()">👁️ Preview Full Prompt</button>
-                    <button class="btn btn-primary" onclick="generateImages()">🎨 Generate Images</button>
-                    <button class="btn btn-success" onclick="generateContent()">📝 Generate Content</button>
-                    <button class="btn btn-primary" onclick="runFullPipeline()">🚀 Run Full Pipeline</button>
+                <!-- Step 3: Generate Content -->
+                <div style="background: #cce5ff; padding: 15px; border-radius: 8px; margin-top: 20px;">
+                    <h3 style="margin: 0 0 10px 0;">🚀 Step 3: Generate Content</h3>
+                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                        After reviewing the fields above, generate the final content.
+                    </p>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn btn-primary" onclick="generateImages()">🎨 Generate Images</button>
+                        <button class="btn btn-success" onclick="generateContent()" id="btn-generate-content">📝 Generate Content</button>
+                        <button class="btn btn-primary" onclick="runFullPipeline()">🚀 Run Full Pipeline</button>
+                    </div>
                 </div>
                 
                 <!-- AI Response Preview (editable before applying) -->
@@ -1070,7 +1093,7 @@ HTML_TEMPLATE = '''
             console.scrollTop = console.scrollHeight;
         }
         
-        // Default system prompt
+        // Default system prompt (no internal part names)
         const DEFAULT_SYSTEM_PROMPT = `You are an expert product content writer for Amazon marketplace listings.
 You will be provided with:
 1. A summary of the product range (sizes, shapes, colors)
@@ -1078,13 +1101,65 @@ You will be provided with:
 3. Theme and use case information
 
 IMPORTANT: The products come in MULTIPLE sizes and shapes:
-- Rectangular signs: saville (115x95mm), dick (140x90mm), barzan (194x143mm), baby_jesus (290x190mm)
-- Circular signs: dracula (95mm diameter)
+- Small rectangular: 115x95mm
+- Medium rectangular: 140x90mm
+- Large rectangular: 194x143mm
+- Extra large rectangular: 290x190mm
+- Circular: 95mm diameter
 - All signs come in 3 colors: silver, gold, and white
 
 Generate content that accurately describes ALL variants, not just one shape.
 Include dimensions in product descriptions.
 Write compelling Amazon-style titles and bullet points.`;
+        
+        // Analyze products with AI to auto-populate theme and use cases
+        async function analyzeProducts() {
+            const btn = document.getElementById('btn-analyze');
+            const status = document.getElementById('analyze-status');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Analyzing...';
+            status.textContent = '';
+            genLog('Starting product analysis with AI...');
+            
+            try {
+                // Get sample image M numbers
+                const sampleMNumbers = Array.from(document.querySelectorAll('#sample-images img'))
+                    .map(img => {
+                        const match = img.src.match(/\/api\/preview\/([^?]+)/);
+                        return match ? match[1] : null;
+                    })
+                    .filter(Boolean);
+                
+                genLog(`Sending ${sampleMNumbers.length} images for analysis...`);
+                
+                const resp = await fetch('/api/analyze/products', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ sample_m_numbers: sampleMNumbers })
+                });
+                
+                const data = await resp.json();
+                
+                if (data.success) {
+                    document.getElementById('theme').value = data.theme || '';
+                    document.getElementById('use-cases').value = data.use_cases || '';
+                    status.textContent = '✓ Fields populated!';
+                    status.style.color = 'green';
+                    genLog('Analysis complete - fields populated', 'success');
+                } else {
+                    status.textContent = `Error: ${data.error}`;
+                    status.style.color = 'red';
+                    genLog(`Analysis failed: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                status.textContent = 'Error analyzing products';
+                status.style.color = 'red';
+                genLog(`Analysis error: ${e.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🔍 Analyze Products with AI';
+            }
+        }
 
         function resetSystemPrompt() {
             document.getElementById('ai-system-prompt').value = DEFAULT_SYSTEM_PROMPT;
@@ -1108,13 +1183,13 @@ Write compelling Amazon-style titles and bullet points.`;
                 if (p.description) descriptions.add(p.description);
             });
             
-            // Size dimensions
+            // Size dimensions (display names without internal part names)
             const sizeDims = {
-                'saville': '115x95mm (rectangular)',
-                'dick': '140x90mm (rectangular)',
-                'barzan': '194x143mm (rectangular)',
-                'dracula': '95mm diameter (circular)',
-                'baby_jesus': '290x190mm (rectangular)'
+                'saville': 'Small (115x95mm, rectangular)',
+                'dick': 'Medium (140x90mm, rectangular)',
+                'barzan': 'Large (194x143mm, rectangular)',
+                'dracula': 'Circular (95mm diameter)',
+                'baby_jesus': 'Extra Large (290x190mm, rectangular)'
             };
             
             let summaryHTML = `<strong>Total Products:</strong> ${products.length}<br>`;
@@ -1122,7 +1197,7 @@ Write compelling Amazon-style titles and bullet points.`;
             summaryHTML += `<strong>Sizes:</strong><br>`;
             for (const [size, count] of Object.entries(sizes)) {
                 const dims = sizeDims[size] || 'unknown dimensions';
-                summaryHTML += `&nbsp;&nbsp;• ${size}: ${count} products - ${dims}<br>`;
+                summaryHTML += `&nbsp;&nbsp;• ${dims}: ${count} products<br>`;
             }
             summaryHTML += `<strong>Product Types:</strong> ${descriptions.size} unique designs`;
             
@@ -1362,6 +1437,97 @@ def preview_product(m_number):
         return Response(svg, mimetype='image/svg+xml')
 
 
+@app.route('/api/analyze/products', methods=['POST'])
+def analyze_products():
+    """Analyze product images with AI to auto-populate theme and use cases."""
+    import os
+    import base64
+    import logging
+    from image_generator import generate_product_image
+    
+    data = request.json or {}
+    sample_m_numbers = data.get('sample_m_numbers', [])
+    
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return jsonify({"success": False, "error": "OPENAI_API_KEY not set"}), 400
+    
+    if not sample_m_numbers:
+        return jsonify({"success": False, "error": "No sample images provided"}), 400
+    
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        
+        # Build message content with images
+        content = []
+        
+        # Add sample images
+        for m_number in sample_m_numbers[:5]:
+            product = Product.get(m_number)
+            if product:
+                try:
+                    png_bytes = generate_product_image(product, "main")
+                    img_base64 = base64.b64encode(png_bytes).decode()
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{img_base64}"
+                        }
+                    })
+                except Exception as e:
+                    logging.warning(f"Failed to generate sample image for {m_number}: {e}")
+        
+        # Add analysis prompt
+        content.append({
+            "type": "text",
+            "text": """Analyze these product images. They are self-adhesive aluminum signs.
+
+Please provide:
+1. THEME: A brief description of what type of sign this is (e.g., "No entry without permission sign", "Fire exit sign", "Warning sign"). Be specific about what the sign communicates.
+
+2. USE_CASES: Where would this sign typically be used? List 2-4 locations or scenarios, separated by commas (e.g., "offices, warehouses, restricted areas, private property").
+
+Respond in this exact format:
+THEME: [your theme description]
+USE_CASES: [comma-separated list of use cases]"""
+        })
+        
+        # Call OpenAI GPT-4 Vision API
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            max_tokens=500,
+            messages=[
+                {"role": "system", "content": "You are a product analyst. Analyze the sign images and identify what they communicate and where they would be used. Be concise and specific."},
+                {"role": "user", "content": content}
+            ]
+        )
+        
+        result = response.choices[0].message.content
+        
+        # Parse the response
+        theme = ""
+        use_cases = ""
+        
+        for line in result.split('\n'):
+            line = line.strip()
+            if line.upper().startswith('THEME:'):
+                theme = line[6:].strip()
+            elif line.upper().startswith('USE_CASES:'):
+                use_cases = line[10:].strip()
+        
+        return jsonify({
+            "success": True,
+            "theme": theme,
+            "use_cases": use_cases,
+            "raw_response": result
+        })
+        
+    except Exception as e:
+        logging.error(f"Failed to analyze products: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route('/api/generate/images', methods=['POST'])
 def generate_images():
     """Generate product images for approved products."""
@@ -1381,7 +1547,7 @@ def generate_images():
         upload_to_r2=True
     )
     
-    return jsonify({"job_id": job_id, "products": len(products)})
+    return jsonify({"success": True, "job_id": job_id, "count": len(products)})
 
 
 @app.route('/api/jobs')
