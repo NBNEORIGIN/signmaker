@@ -3028,10 +3028,12 @@ def generate_lifestyle_background():
         client = OpenAI(api_key=api_key)
         
         prompt = f"""A professional lifestyle photograph showing a clean, modern interior space 
-where a {theme} would be displayed. The image should show a wall or door in an office, 
+where a {theme} would be displayed. The image should show a plain wall or door in an office, 
 warehouse, or commercial building setting. The lighting should be natural and professional. 
-Leave a clear, well-lit area on the wall where a sign could be placed. 
-No text or signs should be visible in the image. Photorealistic style."""
+Leave a clear, well-lit empty area on the wall where a sign could be placed. 
+IMPORTANT: The wall must be completely empty - absolutely no signs, plaques, posters, text, 
+labels, or any markings of any kind should be visible anywhere in the image. 
+The space should look like it's waiting for a sign to be installed. Photorealistic style."""
         
         logging.info("Calling DALL-E 3 API...")
         response = client.images.generate(
@@ -3131,8 +3133,9 @@ def generate_lifestyle_images():
             try:
                 m_number = product['m_number']
                 
-                # Generate transparent product image
-                png_bytes = generate_product_image(product, "main")
+                # Generate transparent product image (not main - use transparent version)
+                from image_generator import generate_transparent_product_image
+                png_bytes = generate_transparent_product_image(product)
                 product_img = Image.open(BytesIO(png_bytes)).convert('RGBA')
                 
                 # Resize product to fit nicely (about 40% of background width)

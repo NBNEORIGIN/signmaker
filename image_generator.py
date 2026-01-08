@@ -410,6 +410,10 @@ def generate_product_image(product: dict, template_type: str = "main") -> bytes:
         png_bytes = render_svg_to_bytes(svg_content, scale=4)
         return png_bytes
     
+    # For 'peel_and_stick' template, render with transparency to show full template graphics
+    # (EASY text, arrow, PEEL & STICK text) - these are part of the SVG template
+    render_transparent = (template_type == "peel_and_stick")
+    
     # Get bounds and calculate layout (pass template_type for proper bounds lookup)
     bounds = _get_sign_bounds(size, orientation)
     layout = _calculate_layout(
@@ -440,7 +444,7 @@ def generate_product_image(product: dict, template_type: str = "main") -> bytes:
     
     # Convert to string and render
     svg_content = etree.tostring(root, encoding="unicode")
-    png_bytes = render_svg_to_bytes(svg_content, scale=4)
+    png_bytes = render_svg_to_bytes(svg_content, scale=4, transparent=render_transparent)
     
     return png_bytes
 

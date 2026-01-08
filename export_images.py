@@ -26,6 +26,7 @@ IMAGE_TYPE_NUMBERS = {
     "dimensions": "002",
     "peel_and_stick": "003",
     "rear": "004",
+    "lifestyle": "006",
 }
 
 # Size display names
@@ -124,6 +125,13 @@ def generate_m_number_folder_zip(products: list[dict], include_master_svg: bool 
                     # JPEG version
                     jpeg_path = f"{folder_name}/002 Images/{m_number} - {img_num}.jpg"
                     zf.writestr(jpeg_path, _png_to_jpeg(png_bytes))
+                
+                # Check for lifestyle image (generated separately)
+                lifestyle_path = Path(__file__).parent / f"{m_number}_lifestyle.jpg"
+                if lifestyle_path.exists():
+                    with open(lifestyle_path, 'rb') as lf:
+                        lifestyle_bytes = lf.read()
+                    zf.writestr(f"{folder_name}/002 Images/{m_number} - 006.jpg", lifestyle_bytes)
                 
                 # Add master SVG to 001 Design/001 MASTER FILE
                 if include_master_svg:
