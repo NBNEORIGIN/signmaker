@@ -515,13 +515,14 @@ def generate_transparent_product_image(product: dict) -> bytes:
         rect.set("stroke-width", "1")
     
     # Calculate layout for icons and text
+    # SignBounds uses: x, y, width, height, is_circular, padding
     bounds = SignBounds(
-        inner_x=5,
-        inner_y=5,
-        inner_width=svg_width - 10,
-        inner_height=svg_height - 10,
-        center_x=svg_width / 2,
-        center_y=svg_height / 2,
+        x=0,
+        y=0,
+        width=svg_width,
+        height=svg_height,
+        is_circular=is_circular,
+        padding=5.0,
     )
     
     layout = _calculate_layout(

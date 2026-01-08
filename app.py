@@ -212,10 +212,15 @@ HTML_TEMPLATE = '''
                 <h2>QA Review</h2>
                 <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
                     <button class="btn btn-secondary" onclick="loadQAProducts()">↻ Refresh</button>
-                    <button class="btn btn-primary" onclick="generateAllLifestyles()">🎨 Generate All Lifestyle Images</button>
+                    <button class="btn btn-primary" onclick="generateAllLifestyles()" id="btn-lifestyle">🎨 Generate All Lifestyle Images</button>
                     <span id="lifestyle-status" style="font-size: 12px; color: #666;"></span>
                 </div>
                 <div id="qa-grid" class="product-grid" style="margin-top: 20px;"></div>
+            </div>
+            <!-- Debug Terminal -->
+            <div class="card" style="margin-top: 20px;">
+                <h3 style="margin-bottom: 10px;">Debug Console</h3>
+                <div id="debug-console" class="output-box" style="height: 150px; font-size: 11px;"></div>
             </div>
         </div>
         
@@ -385,9 +390,21 @@ HTML_TEMPLATE = '''
             `).join('');
         }
         
+        // Debug console logging
+        function debugLog(message, type = 'info') {
+            const console = document.getElementById('debug-console');
+            if (!console) return;
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? '#f00' : type === 'success' ? '#0f0' : '#0ff';
+            console.innerHTML += `<span style="color: ${color}">[${timestamp}] ${message}</span>\n`;
+            console.scrollTop = console.scrollHeight;
+        }
+        
         async function loadQAProducts() {
+            debugLog('Loading products...');
             const resp = await fetch('/api/products');
             products = await resp.json();
+            debugLog(`Loaded ${products.length} products`, 'success');
             renderQAGrid();
         }
         
@@ -874,6 +891,13 @@ HTML_TEMPLATE = '''
             const silverProduct = products.find(x => x.m_number === mNumber);
             if (!silverProduct) return;
             
+            // Show loading state
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '⏳ Working...';
+            btn.disabled = true;
+            debugLog(`Regenerating variants for ${mNumber}...`);
+            
             const { icon_scale, icon_offset_x, icon_offset_y, size, description } = silverProduct;
             
             // Find gold and white variants
@@ -886,6 +910,7 @@ HTML_TEMPLATE = '''
             // Apply silver settings to all variants and refresh images
             try {
                 for (const variant of variants) {
+                    debugLog(`  Updating ${variant.m_number}...`);
                     await fetch(`/api/products/${variant.m_number}/scale`, {
                         method: 'PATCH',
                         headers: {'Content-Type': 'application/json'},
@@ -898,13 +923,19 @@ HTML_TEMPLATE = '''
                     });
                 }
                 
+                debugLog(`Regenerated ${variants.length + 1} variants`, 'success');
+                
                 // Refresh all variant images
                 refreshProductImage(mNumber);
                 for (const variant of variants) {
                     refreshProductImage(variant.m_number);
                 }
             } catch (e) {
+                debugLog(`Error: ${e.message}`, 'error');
                 console.error('Failed to regenerate variants:', e);
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
             }
         }
         
@@ -991,7 +1022,8 @@ HTML_TEMPLATE = '''
         
         async function generateLifestyleForProduct(mNumber) {
             const container = document.getElementById(`lifestyle-${mNumber}`);
-            container.innerHTML = '<span style="font-size: 9px;">Generating...</span>';
+            container.innerHTML = '<span style="font-size: 9px;">⏳ Generating...</span>';
+            debugLog(`Generating lifestyle for ${mNumber}...`);
             
             try {
                 const resp = await fetch(`/api/generate/lifestyle/${mNumber}`, {method: 'POST'});
@@ -999,18 +1031,25 @@ HTML_TEMPLATE = '''
                 
                 if (data.success && data.image_url) {
                     container.innerHTML = `<img src="${data.image_url}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 4px;">`;
+                    debugLog(`Lifestyle generated for ${mNumber}`, 'success');
                 } else {
                     container.innerHTML = `<span style="font-size: 8px; color: #c00;">${data.error || 'Failed'}</span>`;
+                    debugLog(`Lifestyle failed for ${mNumber}: ${data.error}`, 'error');
                 }
             } catch (e) {
                 container.innerHTML = '<span style="font-size: 8px; color: #c00;">Error</span>';
+                debugLog(`Lifestyle error for ${mNumber}: ${e.message}`, 'error');
                 console.error('Failed to generate lifestyle:', e);
             }
         }
         
         async function generateAllLifestyles() {
             const status = document.getElementById('lifestyle-status');
+            const btn = document.getElementById('btn-lifestyle');
+            btn.innerHTML = '⏳ Generating...';
+            btn.disabled = true;
             status.textContent = 'Generating lifestyle images for all products...';
+            debugLog('Starting batch lifestyle generation...');
             
             try {
                 const resp = await fetch('/api/generate/lifestyle-batch', {method: 'POST'});
@@ -1018,6 +1057,7 @@ HTML_TEMPLATE = '''
                 
                 if (data.success) {
                     status.textContent = `Generated ${data.count} lifestyle images!`;
+                    debugLog(`Batch lifestyle complete: ${data.count} images`, 'success');
                     // Update all lifestyle containers with the generated images
                     for (const [mNumber, imageUrl] of Object.entries(data.images)) {
                         const container = document.getElementById(`lifestyle-${mNumber}`);
@@ -1027,10 +1067,15 @@ HTML_TEMPLATE = '''
                     }
                 } else {
                     status.textContent = `Error: ${data.error}`;
+                    debugLog(`Batch lifestyle failed: ${data.error}`, 'error');
                 }
             } catch (e) {
                 status.textContent = 'Error generating lifestyle images';
+                debugLog(`Batch lifestyle error: ${e.message}`, 'error');
                 console.error('Failed to generate batch lifestyle:', e);
+            } finally {
+                btn.innerHTML = '🎨 Generate All Lifestyle Images';
+                btn.disabled = false;
             }
         }
         
