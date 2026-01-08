@@ -1649,11 +1649,13 @@ Use Cases: ${useCases}
                 
                 // Step 2b: eBay API (with ads) - with timeout handling
                 exportLog('Publishing to eBay (this may take a minute)...');
+                exportLog('eBay: Connecting to eBay API...');
                 progress.innerHTML += '🛒 eBay API (may take up to 2 minutes)...<br>';
                 try {
                     const ebayController = new AbortController();
                     const ebayTimeout = setTimeout(() => ebayController.abort(), 120000); // 2 min timeout
                     
+                    exportLog('eBay: Sending listing request with ads enabled...');
                     const ebayResp = await fetch('/api/ebay/publish', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
@@ -1662,9 +1664,13 @@ Use Cases: ${useCases}
                     });
                     clearTimeout(ebayTimeout);
                     
+                    exportLog(`eBay: Response received (status ${ebayResp.status})`);
                     const ebayData = await ebayResp.json();
                     if (ebayData.success) {
                         progress.innerHTML += `✅ eBay: ${ebayData.count || 0} listings published<br>`;
+                        exportLog(`eBay: Listing ID: ${ebayData.listing_id}`, 'success');
+                        if (ebayData.url) exportLog(`eBay: URL: ${ebayData.url}`, 'success');
+                        if (ebayData.promoted) exportLog('eBay: Ads enabled at 5% rate', 'success');
                         exportLog('eBay listings published', 'success');
                     } else {
                         progress.innerHTML += `⚠️ eBay: ${ebayData.error || 'Check API setup'}<br>`;
@@ -1673,7 +1679,7 @@ Use Cases: ${useCases}
                 } catch (ebayErr) {
                     if (ebayErr.name === 'AbortError') {
                         progress.innerHTML += `⚠️ eBay: Request timed out (API may still be processing)<br>`;
-                        exportLog('eBay request timed out', 'error');
+                        exportLog('eBay request timed out after 2 minutes', 'error');
                     } else {
                         progress.innerHTML += `⚠️ eBay: ${ebayErr.message}<br>`;
                         exportLog(`eBay error: ${ebayErr.message}`, 'error');
