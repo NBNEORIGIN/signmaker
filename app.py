@@ -283,27 +283,23 @@ HTML_TEMPLATE = '''
                     </div>
                 </details>
                 
-                <!-- Step 3: Generate Content -->
+                <!-- Step 3: Generate Amazon Content -->
                 <div style="background: #cce5ff; padding: 15px; border-radius: 8px; margin-top: 20px;">
-                    <h3 style="margin: 0 0 10px 0;">🚀 Step 3: Generate Content</h3>
+                    <h3 style="margin: 0 0 10px 0;">🚀 Step 3: Generate Amazon Content</h3>
                     <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
-                        After reviewing the fields above, generate the final content.
+                        Generate product images, upload to R2, and create Amazon flatfile content.
+                        This data will also be used for eBay API and Etsy exports.
                     </p>
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <button class="btn btn-primary" onclick="generateImages()">🎨 Generate Images</button>
-                        <button class="btn btn-success" onclick="generateContent()" id="btn-generate-content">📝 Generate Content</button>
-                        <button class="btn btn-primary" onclick="runFullPipeline()">🚀 Run Full Pipeline</button>
-                    </div>
+                    <button class="btn btn-success btn-lg" onclick="generateAmazonContent()" id="btn-generate-amazon" style="font-size: 16px; padding: 12px 24px;">
+                        📦 Generate Amazon Content & Images
+                    </button>
+                    <span id="amazon-status" style="margin-left: 15px; font-size: 12px;"></span>
                 </div>
                 
-                <!-- AI Response Preview (editable before applying) -->
-                <div id="ai-response-section" style="display: none; margin-top: 20px;">
-                    <h3>📝 AI Generated Content (Review & Edit)</h3>
-                    <textarea id="ai-response" rows="10" style="font-family: monospace; font-size: 11px; width: 100%;"></textarea>
-                    <div style="margin-top: 10px;">
-                        <button class="btn btn-success" onclick="applyAIContent()">✓ Apply Content</button>
-                        <button class="btn btn-secondary" onclick="discardAIContent()">✗ Discard</button>
-                    </div>
+                <!-- Progress/Output Section -->
+                <div id="generation-progress" style="display: none; margin-top: 20px; background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                    <h4 style="margin: 0 0 10px 0;">Generation Progress</h4>
+                    <div id="progress-details" style="font-size: 12px; font-family: monospace;"></div>
                 </div>
             </div>
             
@@ -1315,49 +1311,104 @@ Use Cases: ${useCases}
             }
         }
         
-        function applyAIContent() {
-            const content = document.getElementById('ai-response').value;
-            genLog('Applying AI content...');
-            // TODO: Parse and apply content to products
-            alert('Content applied! (Implementation pending)');
-            document.getElementById('ai-response-section').style.display = 'none';
-        }
-        
-        function discardAIContent() {
-            document.getElementById('ai-response-section').style.display = 'none';
-            genLog('AI content discarded');
-        }
-        
-        async function generateImages() {
-            genLog('Starting image generation...');
-            const btn = event.target;
+        async function generateAmazonContent() {
+            const btn = document.getElementById('btn-generate-amazon');
+            const status = document.getElementById('amazon-status');
+            const progressDiv = document.getElementById('generation-progress');
+            const progressDetails = document.getElementById('progress-details');
+            
             btn.disabled = true;
             btn.innerHTML = '⏳ Generating...';
+            status.textContent = '';
+            progressDiv.style.display = 'block';
+            progressDetails.innerHTML = '';
+            
+            const theme = document.getElementById('theme').value;
+            const useCases = document.getElementById('use-cases').value;
+            const systemPrompt = document.getElementById('ai-system-prompt').value;
+            
+            // Get sample image M numbers
+            const sampleMNumbers = Array.from(document.querySelectorAll('#sample-images img'))
+                .map(img => {
+                    const match = img.src.match(/\/api\/preview\/([^?]+)/);
+                    return match ? match[1] : null;
+                })
+                .filter(Boolean);
             
             try {
-                const resp = await fetch('/api/generate/images', {method: 'POST'});
-                const data = await resp.json();
+                // Step 1: Generate images and upload to R2
+                genLog('Step 1: Generating product images...');
+                progressDetails.innerHTML += '📸 Generating product images...<br>';
                 
-                if (data.success) {
-                    genLog(`Generated images for ${data.count} products`, 'success');
-                    alert(`Generated images for ${data.count} products`);
+                const imgResp = await fetch('/api/generate/images', {method: 'POST'});
+                const imgData = await imgResp.json();
+                
+                if (imgData.success) {
+                    genLog(`Images generated for ${imgData.count} products`, 'success');
+                    progressDetails.innerHTML += `✅ Generated images for ${imgData.count} products<br>`;
                 } else {
-                    genLog(`Error: ${data.error}`, 'error');
-                    alert('Error: ' + data.error);
+                    throw new Error(imgData.error || 'Image generation failed');
                 }
+                
+                // Step 2: Generate AI content
+                genLog('Step 2: Generating AI content...');
+                progressDetails.innerHTML += '🤖 Generating AI content...<br>';
+                
+                const contentResp = await fetch('/api/generate/content', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        theme,
+                        use_cases: useCases,
+                        system_prompt: systemPrompt,
+                        sample_m_numbers: sampleMNumbers
+                    })
+                });
+                
+                const contentData = await contentResp.json();
+                
+                if (contentData.success) {
+                    genLog('AI content generated', 'success');
+                    progressDetails.innerHTML += '✅ AI content generated<br>';
+                } else {
+                    throw new Error(contentData.error || 'Content generation failed');
+                }
+                
+                // Step 3: Generate Amazon flatfile
+                genLog('Step 3: Generating Amazon flatfile...');
+                progressDetails.innerHTML += '📄 Generating Amazon flatfile...<br>';
+                
+                const flatfileResp = await fetch('/api/generate/amazon-flatfile', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        theme,
+                        use_cases: useCases,
+                        ai_content: contentData.content
+                    })
+                });
+                
+                const flatfileData = await flatfileResp.json();
+                
+                if (flatfileData.success) {
+                    genLog('Amazon flatfile generated!', 'success');
+                    progressDetails.innerHTML += '✅ Amazon flatfile ready<br>';
+                    progressDetails.innerHTML += `<br><strong>Complete!</strong> ${flatfileData.product_count} products processed.<br>`;
+                    status.textContent = '✓ Complete!';
+                    status.style.color = 'green';
+                } else {
+                    throw new Error(flatfileData.error || 'Flatfile generation failed');
+                }
+                
             } catch (e) {
                 genLog(`Error: ${e.message}`, 'error');
+                progressDetails.innerHTML += `❌ Error: ${e.message}<br>`;
+                status.textContent = 'Error - see console';
+                status.style.color = 'red';
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = '🎨 Generate Images';
+                btn.innerHTML = '📦 Generate Amazon Content & Images';
             }
-        }
-        
-        async function runFullPipeline() {
-            genLog('Starting full pipeline...');
-            await generateImages();
-            await generateContent();
-            genLog('Full pipeline complete', 'success');
         }
         
         // Override showTab to load Generate tab data
@@ -1548,6 +1599,42 @@ def generate_images():
     )
     
     return jsonify({"success": True, "job_id": job_id, "count": len(products)})
+
+
+@app.route('/api/generate/amazon-flatfile', methods=['POST'])
+def generate_amazon_flatfile():
+    """Generate Amazon flatfile data for all products."""
+    import logging
+    
+    data = request.json or {}
+    theme = data.get('theme', '')
+    use_cases = data.get('use_cases', '')
+    ai_content = data.get('ai_content', '')
+    
+    all_products = Product.all()
+    if not all_products:
+        return jsonify({"success": False, "error": "No products found"}), 400
+    
+    try:
+        # Store AI content and metadata in products for later export
+        for product in all_products:
+            Product.update(product['m_number'], {
+                'ai_theme': theme,
+                'ai_use_cases': use_cases,
+                'ai_content': ai_content
+            })
+        
+        logging.info(f"Amazon flatfile data prepared for {len(all_products)} products")
+        
+        return jsonify({
+            "success": True,
+            "product_count": len(all_products),
+            "message": "Amazon flatfile data ready for export"
+        })
+        
+    except Exception as e:
+        logging.error(f"Failed to generate Amazon flatfile: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/jobs')
