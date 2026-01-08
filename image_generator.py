@@ -233,10 +233,11 @@ def _calculate_layout(
         icon_height = inner_h * 0.65 * icon_scale
         icon_width = icon_height
         icon_x = bounds.center_x - icon_width / 2
-        icon_y = inner_y
+        # Center the icon vertically within the inner bounds
+        icon_y = bounds.center_y - icon_height / 2
         
         icon_bottom = icon_y + icon_height
-        text_y = icon_bottom + inner_h * 0.15
+        text_y = icon_bottom + inner_h * 0.08
         for line in active_lines:
             text_elements.append({
                 "text": line,
