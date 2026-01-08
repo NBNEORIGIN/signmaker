@@ -301,6 +301,16 @@ HTML_TEMPLATE = '''
                     <h4 style="margin: 0 0 10px 0;">Generation Progress</h4>
                     <div id="progress-details" style="font-size: 12px; font-family: monospace;"></div>
                 </div>
+                
+                <!-- Generated Images Preview -->
+                <div style="background: #e8f4f8; padding: 15px; border-radius: 8px; margin-top: 20px;">
+                    <h3 style="margin: 0 0 10px 0;">🖼️ Generated Images Preview</h3>
+                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                        Preview all 4 image types for each product: Main, Dimensions, Peel & Stick, Rear
+                    </p>
+                    <button class="btn btn-secondary" onclick="loadAllImagePreviews()" id="btn-load-previews">🔄 Load Image Previews</button>
+                    <div id="all-images-preview" style="margin-top: 15px; max-height: 600px; overflow-y: auto;"></div>
+                </div>
             </div>
             
             <!-- Debug Terminal -->
@@ -1544,6 +1554,71 @@ Use Cases: ${useCases}
                 loadGenerateTabData();
             }
         };
+        
+        // Load all image previews for Generate tab
+        async function loadAllImagePreviews() {
+            const btn = document.getElementById('btn-load-previews');
+            const container = document.getElementById('all-images-preview');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Loading...';
+            container.innerHTML = '<p style="color: #888;">Loading image previews...</p>';
+            
+            try {
+                const resp = await fetch('/api/products');
+                const products = await resp.json();
+                
+                if (!products || products.length === 0) {
+                    container.innerHTML = '<p style="color: #888;">No products found.</p>';
+                    return;
+                }
+                
+                const imageTypes = ['main', 'dimensions', 'peel_and_stick', 'rear'];
+                const typeLabels = {
+                    'main': '1. Main',
+                    'dimensions': '2. Dimensions', 
+                    'peel_and_stick': '3. Peel & Stick',
+                    'rear': '4. Rear'
+                };
+                
+                let html = '';
+                for (const product of products) {
+                    const mNumber = product.m_number;
+                    html += `
+                        <div style="border: 1px solid #ddd; border-radius: 8px; padding: 10px; margin-bottom: 15px; background: white;">
+                            <h4 style="margin: 0 0 10px 0; font-size: 14px;">${mNumber} - ${product.description || 'No description'}</h4>
+                            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                    `;
+                    
+                    for (const imgType of imageTypes) {
+                        const imgUrl = '/api/export/images/' + mNumber + '?type=' + imgType + '&t=' + Date.now();
+                        html += `
+                            <div style="text-align: center;">
+                                <p style="font-size: 11px; margin: 0 0 5px 0; font-weight: bold;">${typeLabels[imgType]}</p>
+                                <img src="${imgUrl}" 
+                                     style="max-width: 100%; max-height: 150px; border: 1px solid #eee; border-radius: 4px;"
+                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
+                                     loading="lazy">
+                                <p style="display: none; font-size: 10px; color: #999;">Not available</p>
+                            </div>
+                        `;
+                    }
+                    
+                    html += `
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                container.innerHTML = html;
+                genLog('Loaded image previews for ' + products.length + ' products', 'success');
+            } catch (e) {
+                container.innerHTML = '<p style="color: red;">Error loading previews: ' + e.message + '</p>';
+                genLog('Error loading previews: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🔄 Load Image Previews';
+            }
+        }
         
         // ============ EXPORT TAB FUNCTIONS ============
         
@@ -3280,14 +3355,33 @@ def download_m_folders():
 
 @app.route('/api/export/images/<m_number>', methods=['GET'])
 def export_product_images(m_number):
-    """Download all images for a single product as ZIP."""
-    from export_images import generate_single_product_zip
+    """Get product image(s). If type param provided, return single PNG. Otherwise return ZIP of all."""
     from io import BytesIO
+    from image_generator import generate_product_image
     
     product = Product.get(m_number)
     if not product:
         return jsonify({"error": "Product not found"}), 404
     
+    # If type parameter provided, return single image
+    img_type = request.args.get('type')
+    if img_type:
+        valid_types = ['main', 'dimensions', 'peel_and_stick', 'rear']
+        if img_type not in valid_types:
+            return jsonify({"error": f"Invalid type. Must be one of: {valid_types}"}), 400
+        
+        try:
+            png_bytes = generate_product_image(product, img_type)
+            return send_file(
+                BytesIO(png_bytes),
+                mimetype='image/png',
+                download_name=f'{m_number}_{img_type}.png'
+            )
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    
+    # No type param - return ZIP of all images
+    from export_images import generate_single_product_zip
     zip_bytes = generate_single_product_zip(product)
     
     return send_file(
