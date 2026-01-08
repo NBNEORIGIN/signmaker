@@ -66,10 +66,27 @@ def init_db():
             text_scale REAL DEFAULT 1.0,
             icon_offset_x REAL DEFAULT 0.0,
             icon_offset_y REAL DEFAULT 0.0,
+            ai_theme TEXT,
+            ai_use_cases TEXT,
+            ai_content TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    
+    # Add AI columns if they don't exist (for existing databases)
+    try:
+        cur.execute("ALTER TABLE products ADD COLUMN ai_theme TEXT")
+    except:
+        pass
+    try:
+        cur.execute("ALTER TABLE products ADD COLUMN ai_use_cases TEXT")
+    except:
+        pass
+    try:
+        cur.execute("ALTER TABLE products ADD COLUMN ai_content TEXT")
+    except:
+        pass
     
     # Generated content table
     cur.execute(f"""
