@@ -104,10 +104,10 @@ class LayoutResult:
     text_elements: list[dict]
 
 
-# Layout bounds from CSV
+# Layout bounds from CSV - reload on every app start
 LAYOUT_BOUNDS = {}
 
-
+# Force reload on module import
 def _load_layout_bounds():
     """Load layout bounding boxes from CSV file."""
     global LAYOUT_BOUNDS
@@ -170,8 +170,8 @@ def _calculate_layout(
     orientation: str = "landscape",
 ) -> LayoutResult:
     """Calculate positions and sizes for icons and text based on layout mode."""
-    if not LAYOUT_BOUNDS:
-        _load_layout_bounds()
+    # Always reload CSV to pick up changes
+    _load_layout_bounds()
     
     active_lines = [t for t in text_lines if t]
     
@@ -380,6 +380,8 @@ def generate_product_image(product: dict, template_type: str = "main") -> bytes:
     
     icon_scale = float(product.get("icon_scale", 1.0) or 1.0)
     text_scale = float(product.get("text_scale", 1.0) or 1.0)
+    icon_offset_x = float(product.get("icon_offset_x", 0.0) or 0.0)
+    icon_offset_y = float(product.get("icon_offset_y", 0.0) or 0.0)
     font = product.get("font", "arial_heavy")
     
     # Build template filename
@@ -403,13 +405,17 @@ def generate_product_image(product: dict, template_type: str = "main") -> bytes:
         icon_scale, text_scale, size, orientation
     )
     
+    # Apply QA position offsets to icon position
+    final_icon_x = layout.icon_x + icon_offset_x
+    final_icon_y = layout.icon_y + icon_offset_y
+    
     # Inject icons
     for icon_file in icon_files:
         icon_type, icon_data = _load_icon(icon_file)
         if icon_type == "svg":
-            _inject_icon(root, icon_data, layout.icon_x, layout.icon_y, layout.icon_width, layout.icon_height)
+            _inject_icon(root, icon_data, final_icon_x, final_icon_y, layout.icon_width, layout.icon_height)
         elif icon_type == "png":
-            _inject_png_icon(root, icon_data, layout.icon_x, layout.icon_y, layout.icon_width, layout.icon_height)
+            _inject_png_icon(root, icon_data, final_icon_x, final_icon_y, layout.icon_width, layout.icon_height)
     
     # Add text elements
     font_family, font_weight = FONTS.get(font, ("Arial", "bold"))
@@ -469,6 +475,8 @@ def generate_master_svg_for_product(product: dict) -> bytes:
     
     icon_scale = float(product.get("icon_scale", 1.0) or 1.0)
     text_scale = float(product.get("text_scale", 1.0) or 1.0)
+    icon_offset_x = float(product.get("icon_offset_x", 0.0) or 0.0)
+    icon_offset_y = float(product.get("icon_offset_y", 0.0) or 0.0)
     font = product.get("font", "arial_heavy")
     
     # Use master_design_file template
@@ -500,13 +508,17 @@ def generate_master_svg_for_product(product: dict) -> bytes:
         icon_scale, text_scale, size, orientation
     )
     
+    # Apply QA position offsets to icon position
+    final_icon_x = layout.icon_x + icon_offset_x
+    final_icon_y = layout.icon_y + icon_offset_y
+    
     # Inject icons
     for icon_file in icon_files:
         icon_type, icon_data = _load_icon(icon_file)
         if icon_type == "svg":
-            _inject_icon(root, icon_data, layout.icon_x, layout.icon_y, layout.icon_width, layout.icon_height)
+            _inject_icon(root, icon_data, final_icon_x, final_icon_y, layout.icon_width, layout.icon_height)
         elif icon_type == "png":
-            _inject_png_icon(root, icon_data, layout.icon_x, layout.icon_y, layout.icon_width, layout.icon_height)
+            _inject_png_icon(root, icon_data, final_icon_x, final_icon_y, layout.icon_width, layout.icon_height)
     
     # Add text elements
     font_family, font_weight = FONTS.get(font, ("Arial", "bold"))

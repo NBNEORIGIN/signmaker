@@ -388,17 +388,32 @@ HTML_TEMPLATE = '''
                         <div style="margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 6px;">
                             <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
                                 <label style="width: 80px; font-size: 12px;">Icon Scale:</label>
-                                <input type="range" min="0.5" max="1.5" step="0.05" value="${p.icon_scale || 1.0}" 
-                                    onchange="updateProductScale('${p.m_number}', this.value, document.getElementById('text-scale-${p.m_number}').value)"
+                                <input type="range" id="icon-scale-${p.m_number}" min="0.5" max="1.5" step="0.05" value="${p.icon_scale || 1.0}" 
+                                    onchange="updateProductScale('${p.m_number}')"
                                     style="flex: 1;">
                                 <span style="width: 40px; font-size: 12px;">${(p.icon_scale || 1.0).toFixed(2)}</span>
                             </div>
-                            <div style="display: flex; gap: 10px; align-items: center;">
+                            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
                                 <label style="width: 80px; font-size: 12px;">Text Scale:</label>
                                 <input type="range" id="text-scale-${p.m_number}" min="0.5" max="1.5" step="0.05" value="${p.text_scale || 1.0}"
-                                    onchange="updateProductScale('${p.m_number}', document.querySelector('[onchange*=\\'${p.m_number}\\']').value, this.value)"
+                                    onchange="updateProductScale('${p.m_number}')"
                                     style="flex: 1;">
                                 <span style="width: 40px; font-size: 12px;">${(p.text_scale || 1.0).toFixed(2)}</span>
+                            </div>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <label style="width: 80px; font-size: 12px;">Position:</label>
+                                <div style="display: grid; grid-template-columns: 30px 30px 30px; gap: 2px;">
+                                    <div></div>
+                                    <button type="button" onclick="moveIcon('${p.m_number}', 0, -2)" style="padding: 4px 8px; font-size: 10px; cursor: pointer;">▲</button>
+                                    <div></div>
+                                    <button type="button" onclick="moveIcon('${p.m_number}', -2, 0)" style="padding: 4px 8px; font-size: 10px; cursor: pointer;">◀</button>
+                                    <button type="button" onclick="centerIcon('${p.m_number}')" style="padding: 4px 6px; font-size: 8px; cursor: pointer;">⊙</button>
+                                    <button type="button" onclick="moveIcon('${p.m_number}', 2, 0)" style="padding: 4px 8px; font-size: 10px; cursor: pointer;">▶</button>
+                                    <div></div>
+                                    <button type="button" onclick="moveIcon('${p.m_number}', 0, 2)" style="padding: 4px 8px; font-size: 10px; cursor: pointer;">▼</button>
+                                    <div></div>
+                                </div>
+                                <span style="font-size: 10px; color: #666;" id="offset-${p.m_number}">(${(p.icon_offset_x || 0).toFixed(0)}, ${(p.icon_offset_y || 0).toFixed(0)})</span>
                             </div>
                         </div>
                         
@@ -674,15 +689,18 @@ HTML_TEMPLATE = '''
             }
         }
         
-        // Debounce timers for scale updates
-        const scaleTimers = {};
+        // Debounce timers for updates
+        const updateTimers = {};
         
-        function updateProductScale(mNumber, iconScale, textScale) {
+        function updateProductScale(mNumber) {
+            const iconScale = document.getElementById(`icon-scale-${mNumber}`).value;
+            const textScale = document.getElementById(`text-scale-${mNumber}`).value;
+            
             // Debounce: wait 300ms after last change before updating
-            if (scaleTimers[mNumber]) {
-                clearTimeout(scaleTimers[mNumber]);
+            if (updateTimers[mNumber]) {
+                clearTimeout(updateTimers[mNumber]);
             }
-            scaleTimers[mNumber] = setTimeout(async () => {
+            updateTimers[mNumber] = setTimeout(async () => {
                 try {
                     const resp = await fetch(`/api/products/${mNumber}/scale`, {
                         method: 'PATCH',
@@ -690,12 +708,7 @@ HTML_TEMPLATE = '''
                         body: JSON.stringify({icon_scale: parseFloat(iconScale), text_scale: parseFloat(textScale)})
                     });
                     if (resp.ok) {
-                        // Only refresh the specific product's image, not the entire grid
-                        const img = document.querySelector(`img[src*="/api/preview/${mNumber}"]`);
-                        if (img) {
-                            img.src = `/api/preview/${mNumber}?t=${Date.now()}`;
-                        }
-                        // Update the local products array
+                        refreshProductImage(mNumber);
                         const p = products.find(x => x.m_number === mNumber);
                         if (p) {
                             p.icon_scale = parseFloat(iconScale);
@@ -706,6 +719,58 @@ HTML_TEMPLATE = '''
                     console.error('Failed to update scale:', e);
                 }
             }, 300);
+        }
+        
+        async function moveIcon(mNumber, dx, dy) {
+            const p = products.find(x => x.m_number === mNumber);
+            if (!p) return;
+            
+            const newX = (p.icon_offset_x || 0) + dx;
+            const newY = (p.icon_offset_y || 0) + dy;
+            
+            try {
+                const resp = await fetch(`/api/products/${mNumber}/position`, {
+                    method: 'PATCH',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({icon_offset_x: newX, icon_offset_y: newY})
+                });
+                if (resp.ok) {
+                    p.icon_offset_x = newX;
+                    p.icon_offset_y = newY;
+                    document.getElementById(`offset-${mNumber}`).textContent = `(${newX.toFixed(0)}, ${newY.toFixed(0)})`;
+                    refreshProductImage(mNumber);
+                }
+            } catch (e) {
+                console.error('Failed to move icon:', e);
+            }
+        }
+        
+        async function centerIcon(mNumber) {
+            try {
+                const resp = await fetch(`/api/products/${mNumber}/position`, {
+                    method: 'PATCH',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({icon_offset_x: 0, icon_offset_y: 0})
+                });
+                if (resp.ok) {
+                    const p = products.find(x => x.m_number === mNumber);
+                    if (p) {
+                        p.icon_offset_x = 0;
+                        p.icon_offset_y = 0;
+                    }
+                    document.getElementById(`offset-${mNumber}`).textContent = '(0, 0)';
+                    refreshProductImage(mNumber);
+                }
+            } catch (e) {
+                console.error('Failed to center icon:', e);
+            }
+        }
+        
+        function refreshProductImage(mNumber) {
+            const img = document.querySelector(`img[src*="/api/preview/${mNumber}"]`);
+            if (img) {
+                img.src = `/api/preview/${mNumber}?t=${Date.now()}`;
+            }
         }
         
         // Load products on page load
@@ -1071,6 +1136,27 @@ def update_product_scale(m_number):
         updates['icon_scale'] = float(data['icon_scale'])
     if 'text_scale' in data:
         updates['text_scale'] = float(data['text_scale'])
+    
+    if updates:
+        Product.update(m_number, updates)
+    
+    return jsonify({"success": True, "updates": updates})
+
+
+@app.route('/api/products/<m_number>/position', methods=['PATCH'])
+def update_product_position(m_number):
+    """Update icon_offset_x and icon_offset_y for a product (QA positioning)."""
+    data = request.json
+    
+    product = Product.get(m_number)
+    if not product:
+        return jsonify({"error": "Product not found"}), 404
+    
+    updates = {}
+    if 'icon_offset_x' in data:
+        updates['icon_offset_x'] = float(data['icon_offset_x'])
+    if 'icon_offset_y' in data:
+        updates['icon_offset_y'] = float(data['icon_offset_y'])
     
     if updates:
         Product.update(m_number, updates)

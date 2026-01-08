@@ -64,6 +64,8 @@ def init_db():
             qa_comment TEXT,
             icon_scale REAL DEFAULT 1.0,
             text_scale REAL DEFAULT 1.0,
+            icon_offset_x REAL DEFAULT 0.0,
+            icon_offset_y REAL DEFAULT 0.0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -152,8 +154,9 @@ class Product:
         cur.execute("""
             INSERT INTO products (m_number, description, size, color, layout_mode, 
                 icon_files, text_line_1, text_line_2, text_line_3, orientation,
-                font, material, mounting_type, ean, qa_status, icon_scale, text_scale)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                font, material, mounting_type, ean, qa_status, icon_scale, text_scale,
+                icon_offset_x, icon_offset_y)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             data.get('m_number'), data.get('description'), data.get('size'),
             data.get('color'), data.get('layout_mode', 'A'), data.get('icon_files'),
@@ -161,7 +164,8 @@ class Product:
             data.get('orientation', 'landscape'), data.get('font', 'arial_heavy'),
             data.get('material', '1mm_aluminium'), data.get('mounting_type', 'self_adhesive'),
             data.get('ean'), data.get('qa_status', 'pending'),
-            data.get('icon_scale', 1.0), data.get('text_scale', 1.0)
+            data.get('icon_scale', 1.0), data.get('text_scale', 1.0),
+            data.get('icon_offset_x', 0.0), data.get('icon_offset_y', 0.0)
         ))
         conn.commit()
         conn.close()
