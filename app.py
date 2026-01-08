@@ -330,6 +330,10 @@ HTML_TEMPLATE = '''
                         <p style="font-size: 12px; font-weight: bold;">Background Preview:</p>
                         <img id="lifestyle-bg-preview" style="max-width: 300px; border-radius: 8px; border: 1px solid #ddd;">
                     </div>
+                    <div id="lifestyle-images-preview" style="margin-top: 15px; display: none;">
+                        <p style="font-size: 12px; font-weight: bold;">Generated Lifestyle Images:</p>
+                        <div id="lifestyle-images-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; max-height: 300px; overflow-y: auto;"></div>
+                    </div>
                     <span id="lifestyle-status" style="margin-top: 10px; display: block; font-size: 12px;"></span>
                 </div>
                 
@@ -351,22 +355,33 @@ HTML_TEMPLATE = '''
                     </div>
                 </div>
                 
-                <!-- Step 2: Export to All Marketplaces -->
+                <!-- Step 2: Export to Marketplaces -->
                 <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                    <h3 style="margin: 0 0 10px 0;">📦 Step 2: Export to All Marketplaces</h3>
+                    <h3 style="margin: 0 0 10px 0;">📦 Step 2: Export to Marketplaces</h3>
                     <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
-                        Generate Amazon flatfile, publish to eBay (with ads), and create Etsy shop uploader file.
+                        Generate flatfiles and publish to marketplaces. Each channel can be exported separately.
                     </p>
-                    <button class="btn btn-success btn-lg" onclick="exportAllMarketplaces()" id="btn-export-all" style="font-size: 16px; padding: 12px 24px;">
-                        🚀 Export to All Marketplaces
-                    </button>
-                    <span id="export-all-status" style="margin-left: 15px; font-size: 12px;"></span>
+                    
+                    <!-- Marketplace Export Buttons -->
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px;">
+                        <button class="btn btn-warning" onclick="exportAmazonFlatfile()" id="btn-export-amazon" style="padding: 10px 20px;">
+                            📦 Generate Amazon Flatfile
+                        </button>
+                        <button class="btn btn-primary" onclick="publishToEbay()" id="btn-export-ebay" style="padding: 10px 20px;">
+                            🛒 Publish to eBay (with Ads)
+                        </button>
+                        <button class="btn btn-danger" onclick="exportEtsyFile()" id="btn-export-etsy" style="padding: 10px 20px;">
+                            🧡 Generate Etsy File
+                        </button>
+                    </div>
+                    
+                    <span id="export-all-status" style="font-size: 12px;"></span>
                     <div id="export-progress" style="display: none; margin-top: 15px; background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 12px; font-family: monospace;"></div>
                     
                     <!-- Download buttons for generated files -->
                     <div id="download-buttons" style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
-                        <button class="btn btn-primary" onclick="downloadAmazonFlatfile()">📥 Download Amazon Flatfile</button>
-                        <button class="btn btn-warning" onclick="downloadEtsyFile()">📥 Download Etsy File</button>
+                        <button class="btn btn-outline-primary" onclick="downloadAmazonFlatfile()">📥 Download Amazon Flatfile</button>
+                        <button class="btn btn-outline-warning" onclick="downloadEtsyFile()">📥 Download Etsy File</button>
                     </div>
                 </div>
                 
@@ -1600,9 +1615,23 @@ Use Cases: ${useCases}
                 const data = await resp.json();
                 
                 if (data.success) {
-                    status.textContent = `✓ Created ${data.count} lifestyle images!`;
+                    status.textContent = `✓ Created ${data.count} lifestyle images and uploaded to R2!`;
                     status.style.color = 'green';
                     exportLog(`Created ${data.count} lifestyle images`, 'success');
+                    
+                    // Show preview grid of lifestyle images
+                    if (data.images && data.images.length > 0) {
+                        const previewDiv = document.getElementById('lifestyle-images-preview');
+                        const grid = document.getElementById('lifestyle-images-grid');
+                        previewDiv.style.display = 'block';
+                        grid.innerHTML = data.images.map(img => `
+                            <div style="text-align: center;">
+                                <img src="${img.url}" style="width: 140px; height: 100px; object-fit: contain; border: 1px solid #ddd; border-radius: 4px; background: white;">
+                                <div style="font-size: 9px; color: #666;">${img.m_number}</div>
+                            </div>
+                        `).join('');
+                        exportLog(`Showing ${data.images.length} lifestyle image previews`, 'success');
+                    }
                 } else {
                     status.textContent = `Error: ${data.error}`;
                     status.style.color = 'red';
@@ -1615,6 +1644,132 @@ Use Cases: ${useCases}
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '📸 Create Lifestyle Images';
+            }
+        }
+        
+        // Separate marketplace export functions
+        async function exportAmazonFlatfile() {
+            const btn = document.getElementById('btn-export-amazon');
+            const status = document.getElementById('export-all-status');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Generating...';
+            exportLog('Generating Amazon flatfile...');
+            
+            try {
+                const theme = document.getElementById('theme')?.value || '';
+                const useCases = document.getElementById('use-cases')?.value || '';
+                
+                const resp = await fetch('/api/export/amazon', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ theme, use_cases: useCases })
+                });
+                const data = await resp.json();
+                
+                if (data.success) {
+                    status.textContent = '✓ Amazon flatfile generated!';
+                    status.style.color = 'green';
+                    exportLog(`Amazon flatfile generated: ${data.message}`, 'success');
+                } else {
+                    status.textContent = `Error: ${data.error}`;
+                    status.style.color = 'red';
+                    exportLog(`Amazon error: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                status.textContent = 'Error generating Amazon flatfile';
+                status.style.color = 'red';
+                exportLog(`Error: ${e.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '📦 Generate Amazon Flatfile';
+            }
+        }
+        
+        async function publishToEbay() {
+            const btn = document.getElementById('btn-export-ebay');
+            const status = document.getElementById('export-all-status');
+            const progress = document.getElementById('export-progress');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Publishing...';
+            progress.style.display = 'block';
+            progress.innerHTML = '🛒 Connecting to eBay API...<br>';
+            exportLog('Publishing to eBay (this may take up to 2 minutes)...');
+            exportLog('eBay: Connecting to eBay API...');
+            
+            try {
+                const ebayController = new AbortController();
+                const ebayTimeout = setTimeout(() => ebayController.abort(), 120000);
+                
+                exportLog('eBay: Sending listing request with ads enabled...');
+                const resp = await fetch('/api/ebay/publish', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ with_ads: true }),
+                    signal: ebayController.signal
+                });
+                clearTimeout(ebayTimeout);
+                
+                exportLog(`eBay: Response received (status ${resp.status})`);
+                const data = await resp.json();
+                
+                if (data.success) {
+                    progress.innerHTML += `✅ eBay: ${data.count || 0} listings published<br>`;
+                    status.textContent = '✓ eBay listings published!';
+                    status.style.color = 'green';
+                    exportLog(`eBay: Listing ID: ${data.listing_id}`, 'success');
+                    if (data.url) exportLog(`eBay: URL: ${data.url}`, 'success');
+                    if (data.promoted) exportLog('eBay: Ads enabled at 5% rate', 'success');
+                    exportLog('eBay listings published', 'success');
+                } else {
+                    progress.innerHTML += `⚠️ eBay: ${data.error || 'Check API setup'}<br>`;
+                    status.textContent = `eBay Error: ${data.error}`;
+                    status.style.color = 'red';
+                    exportLog(`eBay warning: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                if (e.name === 'AbortError') {
+                    progress.innerHTML += `⚠️ eBay: Request timed out<br>`;
+                    status.textContent = 'eBay request timed out';
+                    exportLog('eBay request timed out after 2 minutes', 'error');
+                } else {
+                    progress.innerHTML += `⚠️ eBay: ${e.message}<br>`;
+                    status.textContent = `eBay Error: ${e.message}`;
+                    exportLog(`eBay error: ${e.message}`, 'error');
+                }
+                status.style.color = 'red';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🛒 Publish to eBay (with Ads)';
+            }
+        }
+        
+        async function exportEtsyFile() {
+            const btn = document.getElementById('btn-export-etsy');
+            const status = document.getElementById('export-all-status');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Generating...';
+            exportLog('Generating Etsy shop uploader...');
+            
+            try {
+                const resp = await fetch('/api/export/etsy', {method: 'POST'});
+                const data = await resp.json();
+                
+                if (data.success) {
+                    status.textContent = '✓ Etsy file generated!';
+                    status.style.color = 'green';
+                    exportLog(`Etsy shop uploader generated: ${data.message}`, 'success');
+                } else {
+                    status.textContent = `Error: ${data.error}`;
+                    status.style.color = 'red';
+                    exportLog(`Etsy error: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                status.textContent = 'Error generating Etsy file';
+                status.style.color = 'red';
+                exportLog(`Error: ${e.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🧡 Generate Etsy File';
             }
         }
         
@@ -2930,8 +3085,9 @@ def preview_lifestyle_background():
 
 @app.route('/api/export/lifestyle-images', methods=['POST'])
 def generate_lifestyle_images():
-    """Generate lifestyle images by overlaying product PNGs on the background."""
+    """Generate lifestyle images by overlaying product PNGs on the background and upload to R2."""
     import logging
+    import os
     from PIL import Image
     from io import BytesIO
     from image_generator import generate_product_image
@@ -2953,14 +3109,28 @@ def generate_lifestyle_images():
     if not products:
         return jsonify({"success": False, "error": "No products found"}), 400
     
+    R2_PUBLIC_URL = os.environ.get("R2_PUBLIC_URL", "https://pub-f0f96448c91147489e7b6c6b22ed5010.r2.dev")
+    
     try:
         # Load background image
         background = Image.open(bg_path).convert('RGBA')
         bg_width, bg_height = background.size
         
         count = 0
+        images_data = []
+        
+        # Try to get R2 upload function
+        try:
+            from r2_upload import upload_to_r2
+            can_upload = True
+        except ImportError:
+            can_upload = False
+            logging.warning("R2 upload not available - saving locally only")
+        
         for product in products:
             try:
+                m_number = product['m_number']
+                
                 # Generate transparent product image
                 png_bytes = generate_product_image(product, "main")
                 product_img = Image.open(BytesIO(png_bytes)).convert('RGBA')
@@ -2977,9 +3147,36 @@ def generate_lifestyle_images():
                 y_pos = int(bg_height * 0.45 - target_height // 2)
                 composite.paste(product_img, (x_pos, y_pos), product_img)
                 
-                # Save lifestyle image
-                lifestyle_path = Path(__file__).parent / f"{product['m_number']}_lifestyle.png"
-                composite.save(lifestyle_path, 'PNG')
+                # Convert to RGB for JPEG (smaller file size for R2)
+                composite_rgb = composite.convert('RGB')
+                
+                # Save to bytes
+                img_bytes = BytesIO()
+                composite_rgb.save(img_bytes, 'JPEG', quality=90)
+                img_bytes.seek(0)
+                
+                # Save locally
+                lifestyle_path = Path(__file__).parent / f"{m_number}_lifestyle.jpg"
+                with open(lifestyle_path, 'wb') as f:
+                    f.write(img_bytes.getvalue())
+                
+                # Upload to R2 if available
+                r2_url = None
+                if can_upload:
+                    try:
+                        img_bytes.seek(0)
+                        r2_key = f"{m_number} - 006.jpg"  # Lifestyle image as image 6
+                        upload_to_r2(img_bytes.getvalue(), r2_key, content_type='image/jpeg')
+                        r2_url = f"{R2_PUBLIC_URL}/{r2_key}"
+                        logging.info(f"Uploaded lifestyle image to R2: {r2_key}")
+                    except Exception as upload_err:
+                        logging.warning(f"Failed to upload {m_number} to R2: {upload_err}")
+                
+                images_data.append({
+                    'm_number': m_number,
+                    'url': f"/api/export/lifestyle-preview/{m_number}",
+                    'r2_url': r2_url
+                })
                 count += 1
                 
             except Exception as e:
@@ -2988,12 +3185,24 @@ def generate_lifestyle_images():
         return jsonify({
             "success": True,
             "count": count,
+            "images": images_data,
             "message": f"Created {count} lifestyle images"
         })
         
     except Exception as e:
         logging.error(f"Failed to generate lifestyle images: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/export/lifestyle-preview/<m_number>')
+def preview_lifestyle_image(m_number):
+    """Serve a lifestyle image preview."""
+    file_path = Path(__file__).parent / f"{m_number}_lifestyle.jpg"
+    if not file_path.exists():
+        file_path = Path(__file__).parent / f"{m_number}_lifestyle.png"
+    if not file_path.exists():
+        return "File not found", 404
+    return send_file(file_path)
 
 
 @app.route('/api/export/m-folders', methods=['POST'])

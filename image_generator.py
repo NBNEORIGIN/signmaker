@@ -168,6 +168,7 @@ def _calculate_layout(
     text_scale: float = 1.0,
     size: str = "",
     orientation: str = "landscape",
+    template_type: str = "main",
 ) -> LayoutResult:
     """Calculate positions and sizes for icons and text based on layout mode."""
     # Always reload CSV to pick up changes
@@ -175,8 +176,10 @@ def _calculate_layout(
     
     active_lines = [t for t in text_lines if t]
     
-    # Check CSV-defined bounds
-    icon_key = ("main", size, orientation, layout_mode, "icon")
+    # Check CSV-defined bounds - try template-specific first, then fall back to main
+    icon_key = (template_type, size, orientation, layout_mode, "icon")
+    if icon_key not in LAYOUT_BOUNDS:
+        icon_key = ("main", size, orientation, layout_mode, "icon")
     
     if icon_key in LAYOUT_BOUNDS:
         icon_bounds = LAYOUT_BOUNDS[icon_key]
@@ -192,7 +195,9 @@ def _calculate_layout(
         
         text_elements = []
         for idx, line in enumerate(active_lines):
-            text_key = ("main", size, orientation, layout_mode, f"text_{idx + 1}")
+            text_key = (template_type, size, orientation, layout_mode, f"text_{idx + 1}")
+            if text_key not in LAYOUT_BOUNDS:
+                text_key = ("main", size, orientation, layout_mode, f"text_{idx + 1}")
             if text_key in LAYOUT_BOUNDS:
                 tb = LAYOUT_BOUNDS[text_key]
                 num_chars = len(line) if line else 1
@@ -398,11 +403,18 @@ def generate_product_image(product: dict, template_type: str = "main") -> bytes:
     tree = etree.parse(str(template_path))
     root = tree.getroot()
     
-    # Get bounds and calculate layout
+    # For 'rear' template type, do NOT inject icons or text - just render the template as-is
+    # The rear image shows the 3M adhesive backing without any product graphics
+    if template_type == "rear":
+        svg_content = etree.tostring(root, encoding="unicode")
+        png_bytes = render_svg_to_bytes(svg_content, scale=4)
+        return png_bytes
+    
+    # Get bounds and calculate layout (pass template_type for proper bounds lookup)
     bounds = _get_sign_bounds(size, orientation)
     layout = _calculate_layout(
         bounds, layout_mode, len(icon_files), text_lines,
-        icon_scale, text_scale, size, orientation
+        icon_scale, text_scale, size, orientation, template_type
     )
     
     # Apply QA position offsets to icon position
