@@ -3027,11 +3027,11 @@ def generate_lifestyle_background():
         from openai import OpenAI
         client = OpenAI(api_key=api_key)
         
-        prompt = f"""A professional photograph of a clean, empty wall in a modern office or commercial building interior.
-The wall should be plain and completely bare - no signs, no plaques, no posters, no text, no labels, no frames, 
-no decorations, no markings of any kind anywhere in the image. Just a clean empty wall with good lighting.
-The setting should be professional - an office corridor, warehouse entrance, or building lobby.
-Natural lighting, photorealistic style. The wall is waiting for signage to be installed later."""
+        prompt = """A minimalist photograph of a plain concrete or painted wall in a modern building.
+The wall is completely blank and empty with nothing on it at all. 
+Simple industrial or office interior with soft natural lighting from a window.
+Focus on texture and clean lines. No objects, no decorations, no artwork, no fixtures on the wall.
+Architectural photography style, shallow depth of field, professional quality."""
         
         logging.info("Calling DALL-E 3 API...")
         response = client.images.generate(
@@ -3095,15 +3095,33 @@ def generate_lifestyle_images():
     data = request.json or {}
     background_url = data.get('background_url', '')
     
+    logging.info(f"Lifestyle images request - background_url: {background_url}")
+    
     if not background_url:
         return jsonify({"success": False, "error": "No background URL provided"}), 400
     
-    # Extract file name from URL
-    file_name = background_url.split('file=')[-1] if 'file=' in background_url else ''
+    # Extract file name from URL - handle both /api/export/file?file=X and direct paths
+    if 'file=' in background_url:
+        file_name = background_url.split('file=')[-1]
+    elif background_url.startswith('/'):
+        # Direct path like /api/export/file?file=lifestyle_background_xxx.png
+        file_name = background_url.split('/')[-1]
+    else:
+        file_name = background_url
+    
+    logging.info(f"Extracted file_name: {file_name}")
     bg_path = Path(__file__).parent / file_name
+    logging.info(f"Looking for background at: {bg_path}")
     
     if not bg_path.exists():
-        return jsonify({"success": False, "error": "Background file not found"}), 400
+        # Try to find the most recent lifestyle background
+        bg_files = list(Path(__file__).parent.glob("lifestyle_background_*.png"))
+        if bg_files:
+            bg_path = max(bg_files, key=lambda p: p.stat().st_mtime)
+            logging.info(f"Using most recent background: {bg_path}")
+        else:
+            logging.error(f"Background file not found: {bg_path}")
+            return jsonify({"success": False, "error": f"Background file not found: {file_name}"}), 400
     
     products = Product.all()
     if not products:
@@ -3130,10 +3148,12 @@ def generate_lifestyle_images():
         for product in products:
             try:
                 m_number = product['m_number']
+                logging.info(f"Creating lifestyle image for {m_number}...")
                 
                 # Generate transparent product image (not main - use transparent version)
                 from image_generator import generate_transparent_product_image
                 png_bytes = generate_transparent_product_image(product)
+                logging.info(f"Generated transparent PNG for {m_number}: {len(png_bytes)} bytes")
                 product_img = Image.open(BytesIO(png_bytes)).convert('RGBA')
                 
                 # Resize product to fit nicely (about 40% of background width)
@@ -3181,7 +3201,9 @@ def generate_lifestyle_images():
                 count += 1
                 
             except Exception as e:
-                logging.warning(f"Failed to create lifestyle for {product['m_number']}: {e}")
+                import traceback
+                logging.error(f"Failed to create lifestyle for {product['m_number']}: {e}")
+                logging.error(traceback.format_exc())
         
         return jsonify({
             "success": True,

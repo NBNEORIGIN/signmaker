@@ -104,15 +104,19 @@ def generate_m_number_folder_zip(products: list[dict], include_master_svg: bool 
         ZIP file as bytes
     """
     zip_buffer = io.BytesIO()
+    total_products = len(products)
     
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for product in products:
+        for idx, product in enumerate(products):
             m_number = product.get("m_number", "UNKNOWN")
             folder_name = _get_folder_name(product)
+            logging.info(f"Processing {m_number} ({idx + 1}/{total_products})...")
             
             try:
                 # Generate images
+                logging.info(f"  Generating images for {m_number}...")
                 images = generate_all_images_for_product(product)
+                logging.info(f"  Generated {len(images)} image types for {m_number}")
                 
                 # Add images to 002 Images folder
                 for img_type, png_bytes in images.items():
@@ -156,7 +160,9 @@ def generate_m_number_folder_zip(products: list[dict], include_master_svg: bool 
                 zf.writestr(f"{folder_name}/004 SOPs/.gitkeep", "")
                 
             except Exception as e:
+                import traceback
                 logging.error(f"Failed to generate folder for {m_number}: {e}")
+                logging.error(traceback.format_exc())
                 zf.writestr(f"{folder_name}/ERROR.txt", f"Failed to generate: {e}")
     
     zip_buffer.seek(0)
