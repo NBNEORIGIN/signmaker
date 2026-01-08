@@ -487,7 +487,13 @@ def generate_transparent_product_image(product: dict) -> bytes:
     font = product.get("font", "arial_heavy")
     
     # Load the main template (same as generate_product_image with template_type="main")
-    template_path = _get_template_path(color, size, "main")
+    # Build template filename using same logic as generate_product_image
+    if size == "baby_jesus" and orientation == "portrait":
+        template_name = f"{color}_{size}_portrait_main.svg"
+    else:
+        template_name = f"{color}_{size}_main.svg"
+    
+    template_path = ASSETS_DIR / template_name
     if not template_path.exists():
         raise FileNotFoundError(f"Template not found: {template_path}")
     

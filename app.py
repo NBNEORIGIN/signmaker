@@ -2905,6 +2905,7 @@ def download_etsy_file():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route('/api/export/amazon', methods=['POST'])
 @app.route('/api/export/flatfile', methods=['POST'])
 def export_flatfile():
     """Export Amazon flatfile for approved products."""

@@ -49,9 +49,30 @@ def _render_svg_impl(svg_content: str, scale: int, transparent: bool = False, fu
         page.goto(f'file:///{temp_svg.as_posix()}', timeout=60000)
         page.wait_for_load_state('networkidle', timeout=10000)
         
-        # Always use SVG element screenshot - full_page causes timeouts
-        # For peel_and_stick, the SVG should contain all elements within its bounds
         svg_element = page.locator('svg')
+        
+        if full_page:
+            # For peel_and_stick: get the bounding box of all content and capture that
+            # Use JavaScript to get the actual rendered bounds
+            bbox = page.evaluate('''() => {
+                const svg = document.querySelector('svg');
+                const bbox = svg.getBBox();
+                return {x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height};
+            }''')
+            
+            if bbox and bbox['width'] > 0 and bbox['height'] > 0:
+                # Update viewBox to include all content with padding
+                padding = 5
+                new_viewbox = f"{bbox['x'] - padding} {bbox['y'] - padding} {bbox['width'] + padding * 2} {bbox['height'] + padding * 2}"
+                page.evaluate(f'''() => {{
+                    const svg = document.querySelector('svg');
+                    svg.setAttribute('viewBox', '{new_viewbox}');
+                    svg.style.width = '{bbox['width'] + padding * 2}mm';
+                    svg.style.height = '{bbox['height'] + padding * 2}mm';
+                }}''')
+                # Re-locate after modification
+                svg_element = page.locator('svg')
+        
         png_bytes = svg_element.screenshot(type='png', omit_background=transparent, timeout=60000)
     finally:
         page.close()
