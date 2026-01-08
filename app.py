@@ -1448,21 +1448,20 @@ def generate_lifestyle_single(m_number):
         return jsonify({"success": False, "error": "Product not found"}), 404
     
     try:
-        # Generate main product image and extract just the sign with transparency
+        # Generate main product image
         png_bytes = generate_product_image(product, "main")
         product_img = Image.open(io.BytesIO(png_bytes))
         
-        # Convert to RGBA and make the white/light gray template background transparent
+        # Crop to just the sign area (remove template background)
+        # The sign is roughly in the center of the template
+        width, height = product_img.size
+        # Crop margins - template has ~15% padding on each side
+        margin_x = int(width * 0.15)
+        margin_y = int(height * 0.12)
+        product_img = product_img.crop((margin_x, margin_y, width - margin_x, height - margin_y))
+        
+        # Convert to RGBA
         product_img = product_img.convert('RGBA')
-        datas = product_img.getdata()
-        new_data = []
-        for item in datas:
-            # Make light gray/white background transparent (template background color)
-            if item[0] > 240 and item[1] > 240 and item[2] > 240:
-                new_data.append((255, 255, 255, 0))
-            else:
-                new_data.append(item)
-        product_img.putdata(new_data)
         
         # Get scene prompt based on description
         sign_text = product.get("description", "") or product.get("text_line_1", "") or "Sign"
@@ -1570,18 +1569,16 @@ Professional product photography style, high quality, 4K resolution."""
         results = {}
         for product in silver_products:
             try:
-                # Generate main product image and make background transparent
+                # Generate main product image and crop to sign area
                 png_bytes = generate_product_image(product, "main")
                 product_img = Image.open(io.BytesIO(png_bytes))
+                
+                # Crop to just the sign area
+                width, height = product_img.size
+                margin_x = int(width * 0.15)
+                margin_y = int(height * 0.12)
+                product_img = product_img.crop((margin_x, margin_y, width - margin_x, height - margin_y))
                 product_img = product_img.convert('RGBA')
-                datas = product_img.getdata()
-                new_data = []
-                for item in datas:
-                    if item[0] > 240 and item[1] > 240 and item[2] > 240:
-                        new_data.append((255, 255, 255, 0))
-                    else:
-                        new_data.append(item)
-                product_img.putdata(new_data)
                 
                 lifestyle = composite_product_on_background(product_img, background.copy())
                 
