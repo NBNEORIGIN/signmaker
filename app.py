@@ -259,6 +259,12 @@ HTML_TEMPLATE = '''
                     Full directory structure for Google Drive: 001 Design/001 MASTER FILE (SVG), 002 Images (PNG/JPEG).
                 </p>
                 
+                <h3 style="margin-top: 20px;">AI Lifestyle Images</h3>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                    <button class="btn btn-primary" onclick="generateLifestyleImages()">🎨 Generate Lifestyle Images</button>
+                    <span style="color: #888; font-size: 12px;">Uses DALL-E 3 to create contextual product scenes (requires OPENAI_API_KEY)</span>
+                </div>
+                
                 <div id="export-status" style="margin-top: 15px;"></div>
             </div>
         </div>
@@ -377,7 +383,10 @@ HTML_TEMPLATE = '''
         
         function renderQAGrid() {
             const grid = document.getElementById('qa-grid');
-            grid.innerHTML = products.map(p => `
+            // Only show silver variants in QA (gold/white use same settings)
+            const silverProducts = products.filter(p => p.color === 'silver');
+            
+            grid.innerHTML = silverProducts.map(p => `
                 <div class="product-card">
                     <img src="/api/preview/${p.m_number}?t=${Date.now()}" alt="${p.m_number}">
                     <div class="product-card-body">
@@ -388,17 +397,13 @@ HTML_TEMPLATE = '''
                         <div style="margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 6px;">
                             <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
                                 <label style="width: 80px; font-size: 12px;">Icon Scale:</label>
-                                <input type="range" id="icon-scale-${p.m_number}" min="0.5" max="1.5" step="0.05" value="${p.icon_scale || 1.0}" 
+                                <input type="range" id="icon-scale-${p.m_number}" min="0.5" max="1.5" step="0.01" value="${p.icon_scale || 1.0}" 
+                                    oninput="updateScaleDisplay('${p.m_number}', this.value)"
                                     onchange="updateProductScale('${p.m_number}')"
                                     style="flex: 1;">
-                                <span style="width: 40px; font-size: 12px;">${(p.icon_scale || 1.0).toFixed(2)}</span>
-                            </div>
-                            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
-                                <label style="width: 80px; font-size: 12px;">Text Scale:</label>
-                                <input type="range" id="text-scale-${p.m_number}" min="0.5" max="1.5" step="0.05" value="${p.text_scale || 1.0}"
-                                    onchange="updateProductScale('${p.m_number}')"
-                                    style="flex: 1;">
-                                <span style="width: 40px; font-size: 12px;">${(p.text_scale || 1.0).toFixed(2)}</span>
+                                <input type="number" id="icon-scale-input-${p.m_number}" min="0.5" max="1.5" step="0.01" value="${(p.icon_scale || 1.0).toFixed(2)}"
+                                    onchange="setIconScale('${p.m_number}', this.value)"
+                                    style="width: 55px; font-size: 11px; padding: 2px 4px;">
                             </div>
                             <div style="display: flex; gap: 8px; align-items: center;">
                                 <label style="width: 80px; font-size: 12px;">Position:</label>
@@ -418,7 +423,7 @@ HTML_TEMPLATE = '''
                         </div>
                         
                         <div class="actions">
-                            <button class="btn btn-success" onclick="setQAStatus('${p.m_number}', 'approved')">✓ Approve</button>
+                            <button class="btn btn-success" onclick="approveWithVariants('${p.m_number}')">✓ Approve All Colors</button>
                             <button class="btn btn-danger" onclick="setQAStatus('${p.m_number}', 'rejected')">✗ Reject</button>
                         </div>
                     </div>
@@ -689,12 +694,41 @@ HTML_TEMPLATE = '''
             }
         }
         
+        async function generateLifestyleImages() {
+            const status = document.getElementById('export-status');
+            status.innerHTML = '<div class="alert alert-info">Generating lifestyle images with DALL-E 3... This may take a few minutes.</div>';
+            
+            try {
+                const resp = await fetch('/api/generate/lifestyle', {method: 'POST'});
+                const data = await resp.json();
+                
+                if (data.success) {
+                    status.innerHTML = `<div class="alert alert-success">Generated ${data.generated} lifestyle images! (${data.skipped} skipped, ${data.failed} failed)</div>`;
+                } else {
+                    status.innerHTML = `<div class="alert alert-error">Error: ${data.error}</div>`;
+                }
+            } catch (e) {
+                status.innerHTML = `<div class="alert alert-error">Error: ${e.message}</div>`;
+            }
+        }
+        
         // Debounce timers for updates
         const updateTimers = {};
         
+        function updateScaleDisplay(mNumber, value) {
+            document.getElementById(`icon-scale-input-${mNumber}`).value = parseFloat(value).toFixed(2);
+        }
+        
+        function setIconScale(mNumber, value) {
+            const scale = parseFloat(value);
+            if (scale >= 0.5 && scale <= 1.5) {
+                document.getElementById(`icon-scale-${mNumber}`).value = scale;
+                updateProductScale(mNumber);
+            }
+        }
+        
         function updateProductScale(mNumber) {
             const iconScale = document.getElementById(`icon-scale-${mNumber}`).value;
-            const textScale = document.getElementById(`text-scale-${mNumber}`).value;
             
             // Debounce: wait 300ms after last change before updating
             if (updateTimers[mNumber]) {
@@ -705,20 +739,67 @@ HTML_TEMPLATE = '''
                     const resp = await fetch(`/api/products/${mNumber}/scale`, {
                         method: 'PATCH',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({icon_scale: parseFloat(iconScale), text_scale: parseFloat(textScale)})
+                        body: JSON.stringify({icon_scale: parseFloat(iconScale)})
                     });
                     if (resp.ok) {
                         refreshProductImage(mNumber);
                         const p = products.find(x => x.m_number === mNumber);
                         if (p) {
                             p.icon_scale = parseFloat(iconScale);
-                            p.text_scale = parseFloat(textScale);
                         }
                     }
                 } catch (e) {
                     console.error('Failed to update scale:', e);
                 }
             }, 300);
+        }
+        
+        async function approveWithVariants(mNumber) {
+            // Get the silver product's settings
+            const silverProduct = products.find(x => x.m_number === mNumber);
+            if (!silverProduct) return;
+            
+            const { icon_scale, icon_offset_x, icon_offset_y, size, description } = silverProduct;
+            
+            // Find gold and white variants (same size and description)
+            const variants = products.filter(p => 
+                p.size === size && 
+                p.description === description && 
+                (p.color === 'gold' || p.color === 'white')
+            );
+            
+            // Apply settings to all variants and approve
+            try {
+                // Approve silver
+                await fetch(`/api/products/${mNumber}`, {
+                    method: 'PATCH',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({qa_status: 'approved'})
+                });
+                
+                // Apply settings to gold/white variants and approve
+                for (const variant of variants) {
+                    await fetch(`/api/products/${variant.m_number}/scale`, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({icon_scale: icon_scale})
+                    });
+                    await fetch(`/api/products/${variant.m_number}/position`, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({icon_offset_x: icon_offset_x || 0, icon_offset_y: icon_offset_y || 0})
+                    });
+                    await fetch(`/api/products/${variant.m_number}`, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({qa_status: 'approved'})
+                    });
+                }
+                
+                loadQAProducts();
+            } catch (e) {
+                console.error('Failed to approve variants:', e);
+            }
         }
         
         async function moveIcon(mNumber, dx, dy) {
@@ -1120,6 +1201,86 @@ def export_all_m_number_folders():
         as_attachment=True,
         download_name=f'm_number_folders_{datetime.now().strftime("%Y%m%d_%H%M")}.zip'
     )
+
+
+@app.route('/api/generate/lifestyle', methods=['POST'])
+def generate_lifestyle():
+    """Generate AI lifestyle images for approved products using DALL-E 3."""
+    import os
+    from generate_lifestyle_images import generate_lifestyle_image_dalle, composite_product_on_background, get_scene_prompt
+    from image_generator import generate_product_image
+    from PIL import Image
+    import io
+    
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return jsonify({"success": False, "error": "OPENAI_API_KEY not set in environment"}), 400
+    
+    products = Product.approved()
+    if not products:
+        products = Product.all()
+    
+    if not products:
+        return jsonify({"success": False, "error": "No products to generate lifestyle images for"}), 400
+    
+    generated = 0
+    failed = 0
+    skipped = 0
+    
+    for product in products:
+        try:
+            # Generate main product image
+            png_bytes = generate_product_image(product, "main")
+            product_img = Image.open(io.BytesIO(png_bytes))
+            
+            # Get scene prompt based on description
+            sign_text = product.get("description", "") or product.get("text_line_1", "") or "Sign"
+            scene_prompt = get_scene_prompt(sign_text)
+            
+            # Generate lifestyle background with DALL-E
+            from openai import OpenAI
+            client = OpenAI(api_key=api_key)
+            
+            prompt = f"""{scene_prompt}
+
+The image should have a clear, well-lit wall or door surface where a small rectangular sign could be mounted. 
+Leave a visible flat area (about 15-20% of the image) on a wall or door that would be suitable for mounting a sign.
+The area should be at eye level, well-lit, and clearly visible.
+Professional product photography style, high quality, 4K resolution."""
+
+            response = client.images.generate(
+                model="dall-e-3",
+                prompt=prompt,
+                size="1024x1024",
+                quality="standard",
+                n=1,
+            )
+            
+            image_url = response.data[0].url
+            
+            # Download background
+            import urllib.request
+            with urllib.request.urlopen(image_url) as resp_data:
+                background_data = resp_data.read()
+            
+            background = Image.open(io.BytesIO(background_data))
+            
+            # Composite product onto background
+            lifestyle = composite_product_on_background(product_img, background)
+            
+            # Save to product_images table or just count as success
+            generated += 1
+            
+        except Exception as e:
+            logging.error(f"Failed to generate lifestyle for {product.get('m_number')}: {e}")
+            failed += 1
+    
+    return jsonify({
+        "success": True,
+        "generated": generated,
+        "failed": failed,
+        "skipped": skipped
+    })
 
 
 @app.route('/api/products/<m_number>/scale', methods=['PATCH'])
