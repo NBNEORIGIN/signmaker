@@ -362,6 +362,12 @@ HTML_TEMPLATE = '''
                     </button>
                     <span id="export-all-status" style="margin-left: 15px; font-size: 12px;"></span>
                     <div id="export-progress" style="display: none; margin-top: 15px; background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 12px; font-family: monospace;"></div>
+                    
+                    <!-- Download buttons for generated files -->
+                    <div id="download-buttons" style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn btn-primary" onclick="downloadAmazonFlatfile()">📥 Download Amazon Flatfile</button>
+                        <button class="btn btn-warning" onclick="downloadEtsyFile()">📥 Download Etsy File</button>
+                    </div>
                 </div>
                 
                 <!-- Step 3: Download M Number Folders -->
@@ -1755,6 +1761,66 @@ Use Cases: ${useCases}
             }
         }
         
+        // Download Amazon flatfile
+        async function downloadAmazonFlatfile() {
+            exportLog('Generating Amazon flatfile for download...');
+            const theme = document.getElementById('theme')?.value || '';
+            const useCases = document.getElementById('use-cases')?.value || '';
+            
+            try {
+                const resp = await fetch('/api/export/amazon-flatfile-download', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ theme, use_cases: useCases })
+                });
+                
+                if (resp.ok) {
+                    const blob = await resp.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `amazon_flatfile_${new Date().toISOString().slice(0,10)}.xlsx`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                    exportLog('Amazon flatfile downloaded', 'success');
+                } else {
+                    const data = await resp.json();
+                    exportLog(`Error: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                exportLog(`Error: ${e.message}`, 'error');
+            }
+        }
+        
+        // Download Etsy file
+        async function downloadEtsyFile() {
+            exportLog('Generating Etsy file for download...');
+            
+            try {
+                const resp = await fetch('/api/export/etsy-download', {method: 'POST'});
+                
+                if (resp.ok) {
+                    const blob = await resp.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `etsy_shop_uploader_${new Date().toISOString().slice(0,10)}.xlsx`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                    exportLog('Etsy file downloaded', 'success');
+                } else {
+                    const data = await resp.json();
+                    exportLog(`Error: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                exportLog(`Error: ${e.message}`, 'error');
+            }
+        }
+        
         // Load products on page load
         loadProducts();
     </script>
@@ -2479,6 +2545,151 @@ def flatfile_preview():
         "headers": headers,
         "rows": rows
     })
+
+
+@app.route('/api/export/amazon-flatfile-download', methods=['POST'])
+def download_amazon_flatfile():
+    """Generate and download Amazon flatfile XLSX."""
+    import os
+    import re
+    from io import BytesIO
+    from datetime import datetime
+    import openpyxl
+    from openpyxl.utils import get_column_letter
+    
+    data = request.json or {}
+    theme = data.get('theme', '')
+    use_cases = data.get('use_cases', '')
+    
+    all_products = Product.all()
+    if not all_products:
+        return jsonify({"success": False, "error": "No products found"}), 400
+    
+    # Size dimensions and mappings
+    SIZE_DIMENSIONS_CM = {
+        "dracula": (9.5, 9.5), "saville": (11.0, 9.5), "dick": (14.0, 9.0),
+        "barzan": (19.0, 14.0), "baby_jesus": (29.0, 19.0),
+    }
+    SIZE_MAP_VALUES = {"dracula": "XS", "saville": "S", "dick": "M", "barzan": "L", "baby_jesus": "XL"}
+    SIZE_PRICING = {"dracula": 10.99, "saville": 11.99, "dick": 12.99, "barzan": 15.99, "baby_jesus": 17.99}
+    COLOR_DISPLAY = {"silver": "Silver", "white": "White", "gold": "Gold"}
+    R2_PUBLIC_URL = os.environ.get("R2_PUBLIC_URL", "https://pub-f0f96448c91147489e7b6c6b22ed5010.r2.dev")
+    
+    if not theme:
+        theme = all_products[0].get('description', 'Sign')
+    
+    parent_sku = re.sub(r'[^A-Z0-9_]', '', theme.upper().replace(" ", "_").replace("-", "_"))
+    if not parent_sku.endswith("_PARENT"):
+        parent_sku = f"{parent_sku}_PARENT"
+    
+    default_bullets = [
+        "Premium 1mm brushed aluminium construction with elegant finish",
+        "UV-resistant printing technology ensures text remains clear and legible",
+        "Self-adhesive backing allows quick peel and stick installation",
+        "Fully weatherproof design withstands rain, snow, and temperature extremes",
+        "Clear, bold messaging ensures excellent visibility and compliance"
+    ]
+    default_description = f"{theme} Sign – Brushed Aluminium, Weatherproof, Self-Adhesive."
+    default_search_terms = "sign warning notice metal plaque weatherproof aluminium"
+    
+    AMAZON_COLUMNS = [
+        ("feed_product_type", "Product Type"), ("item_sku", "Seller SKU"), ("update_delete", "Update Delete"),
+        ("brand_name", "Brand Name"), ("external_product_id", "Product ID"), ("external_product_id_type", "Product ID Type"),
+        ("product_description", "Product Description"), ("part_number", "Part Number"), ("manufacturer", "Manufacturer"),
+        ("item_name", "Item Name"), ("recommended_browse_nodes", "Browse Nodes"),
+        ("main_image_url", "Main Image URL"), ("other_image_url1", "Other Image 1"), ("other_image_url2", "Other Image 2"),
+        ("relationship_type", "Relationship Type"), ("variation_theme", "Variation Theme"),
+        ("parent_sku", "Parent SKU"), ("parent_child", "Parentage"), ("style_name", "Style Name"),
+        ("bullet_point1", "Bullet 1"), ("bullet_point2", "Bullet 2"), ("bullet_point3", "Bullet 3"),
+        ("bullet_point4", "Bullet 4"), ("bullet_point5", "Bullet 5"), ("generic_keywords", "Search Terms"),
+        ("color_name", "Colour"), ("size_name", "Size"), ("color_map", "Colour Map"), ("size_map", "Size Map"),
+        ("list_price_with_tax", "List Price"), ("country_of_origin", "Country"),
+    ]
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Template"
+    
+    # Headers
+    for col, (attr, label) in enumerate(AMAZON_COLUMNS, 1):
+        ws.cell(row=1, column=col, value=label)
+        ws.cell(row=2, column=col, value=attr)
+    
+    # Parent row
+    parent_data = {"feed_product_type": "signage", "item_sku": parent_sku, "update_delete": "Update",
+        "brand_name": "NorthByNorthEast", "item_name": f"{theme} Sign – Brushed Aluminium",
+        "variation_theme": "Size & Colour", "parent_child": "Parent", "country_of_origin": "Great Britain"}
+    for col, (attr, _) in enumerate(AMAZON_COLUMNS, 1):
+        ws.cell(row=3, column=col, value=parent_data.get(attr, ""))
+    
+    # Child rows
+    row_num = 4
+    for product in all_products:
+        m_number = product['m_number']
+        size = product.get('size', 'saville').lower()
+        color = product.get('color', 'silver').lower()
+        ean = product.get('ean', '')
+        dims = SIZE_DIMENSIONS_CM.get(size, (11.0, 9.5))
+        size_code = SIZE_MAP_VALUES.get(size, "M")
+        price = SIZE_PRICING.get(size, 12.99)
+        color_display = COLOR_DISPLAY.get(color, color.title())
+        
+        row_data = {
+            "feed_product_type": "signage", "item_sku": m_number, "update_delete": "Update",
+            "brand_name": "NorthByNorthEast", "external_product_id": ean,
+            "external_product_id_type": "EAN" if ean else "", "product_description": default_description,
+            "part_number": m_number, "manufacturer": "North By North East Print and Sign Limited",
+            "item_name": f"{theme} Sign – {dims[0]}x{dims[1]}cm Brushed Aluminium",
+            "recommended_browse_nodes": "330215031",
+            "main_image_url": f"{R2_PUBLIC_URL}/{m_number} - 001.png",
+            "other_image_url1": f"{R2_PUBLIC_URL}/{m_number} - 002.png",
+            "other_image_url2": f"{R2_PUBLIC_URL}/{m_number} - 003.png",
+            "relationship_type": "Variation", "variation_theme": "Size & Colour",
+            "parent_sku": parent_sku, "parent_child": "Child", "style_name": f"{color_display}_{size_code}",
+            "bullet_point1": default_bullets[0], "bullet_point2": default_bullets[1],
+            "bullet_point3": default_bullets[2], "bullet_point4": default_bullets[3],
+            "bullet_point5": default_bullets[4], "generic_keywords": default_search_terms,
+            "color_name": color_display, "size_name": size_code, "color_map": color_display,
+            "size_map": size_code, "list_price_with_tax": str(price), "country_of_origin": "Great Britain",
+        }
+        for col, (attr, _) in enumerate(AMAZON_COLUMNS, 1):
+            ws.cell(row=row_num, column=col, value=row_data.get(attr, ""))
+        row_num += 1
+    
+    for col in range(1, len(AMAZON_COLUMNS) + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 18
+    
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True, download_name=f'amazon_flatfile_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx')
+
+
+@app.route('/api/export/etsy-download', methods=['POST'])
+def download_etsy_file():
+    """Generate and download Etsy shop uploader XLSX."""
+    from io import BytesIO
+    from datetime import datetime
+    
+    try:
+        from export_etsy import generate_etsy_xlsx
+        from config import R2_PUBLIC_URL
+        
+        products = Product.approved()
+        if not products:
+            products = Product.all()
+        
+        if not products:
+            return jsonify({"success": False, "error": "No products found"}), 400
+        
+        xlsx_bytes = generate_etsy_xlsx(products, R2_PUBLIC_URL)
+        
+        return send_file(BytesIO(xlsx_bytes), mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True, download_name=f'etsy_shop_uploader_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx')
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/export/flatfile', methods=['POST'])
