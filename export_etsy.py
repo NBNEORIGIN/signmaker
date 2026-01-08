@@ -111,12 +111,14 @@ Installation couldn't be easier thanks to the high-quality self-adhesive backing
 
 Ideal for private driveways, residential property entrances, business areas, and commercial zones. This durable sign offers an effective, maintenance-free solution."""
             
-            # Image URLs (URL-encoded)
+            # Image URLs (URL-encoded) - includes lifestyle image as image 5
             images = []
             if r2_public_url:
                 for img_num in range(1, 5):
                     img_url = f"{r2_public_url}/{m_number}%20-%20{img_num:03d}.jpg"
                     images.append(img_url)
+                # Add lifestyle image (006.jpg) as 5th image
+                images.append(f"{r2_public_url}/{m_number}%20-%20006.jpg")
             
             # Generate tags (max 13 tags, each max 20 chars)
             base_desc = desc.lower()[:20]  # Truncate to 20 chars
@@ -159,7 +161,7 @@ Ideal for private driveways, residential property entrances, business areas, and
                 "image_2": images[1] if len(images) > 1 else "",
                 "image_3": images[2] if len(images) > 2 else "",
                 "image_4": images[3] if len(images) > 3 else "",
-                "image_5": "",
+                "image_5": images[4] if len(images) > 4 else "",
                 "image_6": "",
                 "image_7": "",
                 "image_8": "",

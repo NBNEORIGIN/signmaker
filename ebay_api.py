@@ -424,10 +424,11 @@ def create_ebay_listing(products: list[dict], policy_ids: dict, promote: bool = 
         title = f"{product.get('description', 'Sign')} - {size_name} Aluminium"[:80]
         
         # Image URLs (from R2) - format: M1288%20-%20001.jpg
+        # Includes lifestyle image (006.jpg) as 5th image
         r2_url = os.environ.get("R2_PUBLIC_URL", "")
         image_urls = []
         if r2_url:
-            for img_num in ["001", "002", "003", "004"]:
+            for img_num in ["001", "002", "003", "004", "006"]:
                 # URL encode the space in filename
                 image_urls.append(f"{r2_url}/{sku}%20-%20{img_num}.jpg")
         

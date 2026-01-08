@@ -2472,6 +2472,7 @@ def generate_amazon_flatfile():
                 "other_image_url2": f"{R2_PUBLIC_URL}/{m_number} - 003.png",
                 "other_image_url3": f"{R2_PUBLIC_URL}/{m_number} - 004.png",
                 "other_image_url4": f"{R2_PUBLIC_URL}/{m_number} - 005.png",
+                "other_image_url5": f"{R2_PUBLIC_URL}/{m_number} - 006.jpg",
                 "relationship_type": "Variation",
                 "variation_theme": "Size & Colour",
                 "parent_sku": parent_sku,
@@ -2769,10 +2770,10 @@ def flatfile_preview():
     if not parent_sku.endswith("_PARENT"):
         parent_sku = f"{parent_sku}_PARENT"
     
-    # Headers for display - ALL columns from flatfile
+    # Headers for display - ALL columns from flatfile (including lifestyle image)
     headers = ['item_sku', 'parent_child', 'item_name', 'color_name', 'size_name', 'external_product_id', 
                'list_price', 'main_image_url', 'other_image_url1', 'other_image_url2', 'other_image_url3', 
-               'other_image_url4', 'bullet_point1', 'bullet_point2', 'generic_keywords']
+               'other_image_url4', 'other_image_url5', 'bullet_point1', 'bullet_point2', 'generic_keywords']
     
     rows = []
     
@@ -2829,6 +2830,7 @@ def flatfile_preview():
             'other_image_url2': f"{R2_PUBLIC_URL}/{m_number} - 003.png",
             'other_image_url3': f"{R2_PUBLIC_URL}/{m_number} - 004.png",
             'other_image_url4': f"{R2_PUBLIC_URL}/{m_number} - 005.png",
+            'other_image_url5': f"{R2_PUBLIC_URL}/{m_number} - 006.jpg",
             'bullet_point1': default_bullets[0],
             'bullet_point2': default_bullets[1],
             'generic_keywords': 'sign warning notice metal plaque weatherproof'
