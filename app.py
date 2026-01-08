@@ -337,15 +337,15 @@ HTML_TEMPLATE = '''
                 <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
                     <h3 style="margin: 0 0 10px 0;">📋 Amazon Flatfile Preview</h3>
                     <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
-                        Preview of the Amazon flatfile data that will be exported.
+                        Preview of the Amazon flatfile data that will be exported. Scroll horizontally to see all columns.
                     </p>
                     <button class="btn btn-secondary" onclick="loadFlatfilePreview()" style="margin-bottom: 10px;">🔄 Refresh Preview</button>
-                    <div style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
-                        <table id="flatfile-preview-table" style="font-size: 11px; white-space: nowrap;">
-                            <thead id="flatfile-thead" style="position: sticky; top: 0; background: #e9ecef;">
+                    <div style="overflow-x: scroll; overflow-y: auto; max-height: 450px; border: 1px solid #ddd; background: white;">
+                        <table id="flatfile-preview-table" style="font-size: 10px; white-space: nowrap; border-collapse: collapse; min-width: 2000px;">
+                            <thead id="flatfile-thead" style="position: sticky; top: 0; background: #343a40; color: white;">
                             </thead>
                             <tbody id="flatfile-tbody">
-                                <tr><td colspan="10" style="text-align: center; color: #888; padding: 20px;">Click "Refresh Preview" to load data</td></tr>
+                                <tr><td colspan="15" style="text-align: center; color: #888; padding: 20px;">Click "Refresh Preview" to load data</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1754,22 +1754,21 @@ Use Cases: ${useCases}
                 const data = await resp.json();
                 
                 if (data.success) {
-                    // Build header row
+                    // Build header row with dark background
                     const headers = data.headers;
-                    thead.innerHTML = '<tr>' + headers.map(h => `<th style="padding: 8px; border: 1px solid #ddd; background: #e9ecef;">${h}</th>`).join('') + '</tr>';
+                    thead.innerHTML = '<tr>' + headers.map(h => `<th style="padding: 8px 12px; border: 1px solid #555; background: #343a40; color: white; font-weight: bold; min-width: 120px;">${h}</th>`).join('') + '</tr>';
                     
-                    // Build data rows
+                    // Build data rows - show full values
                     let rowsHtml = '';
                     data.rows.forEach((row, idx) => {
-                        const bgColor = idx % 2 === 0 ? '#fff' : '#f8f9fa';
+                        const bgColor = idx % 2 === 0 ? '#fff' : '#f0f0f0';
                         const isParent = row.parent_child === 'Parent';
                         const rowStyle = isParent ? 'background: #fff3cd; font-weight: bold;' : `background: ${bgColor};`;
                         rowsHtml += '<tr style="' + rowStyle + '">';
                         headers.forEach(h => {
                             let val = row[h] || '';
-                            // Truncate long values
-                            if (val.length > 40) val = val.substring(0, 37) + '...';
-                            rowsHtml += `<td style="padding: 6px 8px; border: 1px solid #ddd;">${val}</td>`;
+                            // Don't truncate - show full values with scroll
+                            rowsHtml += `<td style="padding: 6px 8px; border: 1px solid #ddd; max-width: 300px; overflow: hidden; text-overflow: ellipsis;" title="${val}">${val}</td>`;
                         });
                         rowsHtml += '</tr>';
                     });
@@ -2521,22 +2520,36 @@ def flatfile_preview():
     if not parent_sku.endswith("_PARENT"):
         parent_sku = f"{parent_sku}_PARENT"
     
-    # Headers for display (subset of full flatfile)
-    headers = ['item_sku', 'parent_child', 'item_name', 'color_name', 'size_name', 'external_product_id', 'list_price', 'main_image_url']
+    # Headers for display - ALL columns from flatfile
+    headers = ['item_sku', 'parent_child', 'item_name', 'color_name', 'size_name', 'external_product_id', 
+               'list_price', 'main_image_url', 'other_image_url1', 'other_image_url2', 'other_image_url3', 
+               'other_image_url4', 'bullet_point1', 'bullet_point2', 'generic_keywords']
     
     rows = []
+    
+    default_bullets = [
+        "Premium 1mm brushed aluminium construction",
+        "UV-resistant printing technology",
+    ]
     
     # Parent row
     parent_title = f"{theme} Sign – Brushed Aluminium, Weatherproof, Self-Adhesive"
     rows.append({
         'item_sku': parent_sku,
         'parent_child': 'Parent',
-        'item_name': parent_title[:50] + '...' if len(parent_title) > 50 else parent_title,
+        'item_name': parent_title,
         'color_name': '',
         'size_name': '',
         'external_product_id': '',
         'list_price': '',
-        'main_image_url': ''
+        'main_image_url': '',
+        'other_image_url1': '',
+        'other_image_url2': '',
+        'other_image_url3': '',
+        'other_image_url4': '',
+        'bullet_point1': '',
+        'bullet_point2': '',
+        'generic_keywords': ''
     })
     
     # Child rows
@@ -2557,12 +2570,19 @@ def flatfile_preview():
         rows.append({
             'item_sku': m_number,
             'parent_child': 'Child',
-            'item_name': title[:50] + '...' if len(title) > 50 else title,
+            'item_name': title,
             'color_name': color_display,
             'size_name': size_code,
             'external_product_id': str(ean) if ean else '',
             'list_price': f"£{price:.2f}",
-            'main_image_url': main_image[:40] + '...' if len(main_image) > 40 else main_image
+            'main_image_url': f"{R2_PUBLIC_URL}/{m_number} - 001.png",
+            'other_image_url1': f"{R2_PUBLIC_URL}/{m_number} - 002.png",
+            'other_image_url2': f"{R2_PUBLIC_URL}/{m_number} - 003.png",
+            'other_image_url3': f"{R2_PUBLIC_URL}/{m_number} - 004.png",
+            'other_image_url4': f"{R2_PUBLIC_URL}/{m_number} - 005.png",
+            'bullet_point1': default_bullets[0],
+            'bullet_point2': default_bullets[1],
+            'generic_keywords': 'sign warning notice metal plaque weatherproof'
         })
     
     return jsonify({
@@ -2623,6 +2643,7 @@ def download_amazon_flatfile():
         ("product_description", "Product Description"), ("part_number", "Part Number"), ("manufacturer", "Manufacturer"),
         ("item_name", "Item Name"), ("recommended_browse_nodes", "Browse Nodes"),
         ("main_image_url", "Main Image URL"), ("other_image_url1", "Other Image 1"), ("other_image_url2", "Other Image 2"),
+        ("other_image_url3", "Other Image 3"), ("other_image_url4", "Other Image 4"),
         ("relationship_type", "Relationship Type"), ("variation_theme", "Variation Theme"),
         ("parent_sku", "Parent SKU"), ("parent_child", "Parentage"), ("style_name", "Style Name"),
         ("bullet_point1", "Bullet 1"), ("bullet_point2", "Bullet 2"), ("bullet_point3", "Bullet 3"),
@@ -2669,6 +2690,8 @@ def download_amazon_flatfile():
             "main_image_url": f"{R2_PUBLIC_URL}/{m_number} - 001.png",
             "other_image_url1": f"{R2_PUBLIC_URL}/{m_number} - 002.png",
             "other_image_url2": f"{R2_PUBLIC_URL}/{m_number} - 003.png",
+            "other_image_url3": f"{R2_PUBLIC_URL}/{m_number} - 004.png",
+            "other_image_url4": f"{R2_PUBLIC_URL}/{m_number} - 005.png",
             "relationship_type": "Variation", "variation_theme": "Size & Colour",
             "parent_sku": parent_sku, "parent_child": "Child", "style_name": f"{color_display}_{size_code}",
             "bullet_point1": default_bullets[0], "bullet_point2": default_bullets[1],
@@ -2814,23 +2837,28 @@ def generate_lifestyle_background():
     """Generate a lifestyle background image using DALL-E."""
     import os
     import logging
-    import requests
-    from datetime import datetime
-    
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        return jsonify({"success": False, "error": "OPENAI_API_KEY not set"}), 400
-    
-    # Get theme from first product or request
-    data = request.json or {}
-    theme = data.get('theme', '')
-    
-    if not theme:
-        products = Product.all()
-        if products:
-            theme = products[0].get('description', 'safety sign')
+    import traceback
     
     try:
+        import requests
+        from datetime import datetime
+        
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            logging.error("OPENAI_API_KEY not set in environment")
+            return jsonify({"success": False, "error": "OPENAI_API_KEY not set. Please set the environment variable."}), 400
+        
+        # Get theme from first product or request
+        data = request.json or {}
+        theme = data.get('theme', '')
+        
+        if not theme:
+            products = Product.all()
+            if products:
+                theme = products[0].get('description', 'safety sign')
+        
+        logging.info(f"Generating lifestyle background for theme: {theme}")
+        
         from openai import OpenAI
         client = OpenAI(api_key=api_key)
         
@@ -2840,6 +2868,7 @@ warehouse, or commercial building setting. The lighting should be natural and pr
 Leave a clear, well-lit area on the wall where a sign could be placed. 
 No text or signs should be visible in the image. Photorealistic style."""
         
+        logging.info("Calling DALL-E 3 API...")
         response = client.images.generate(
             model="dall-e-3",
             prompt=prompt,
@@ -2849,9 +2878,10 @@ No text or signs should be visible in the image. Photorealistic style."""
         )
         
         image_url = response.data[0].url
+        logging.info(f"DALL-E returned image URL: {image_url[:50]}...")
         
         # Download and save the image locally
-        img_response = requests.get(image_url)
+        img_response = requests.get(image_url, timeout=60)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         bg_path = Path(__file__).parent / f"lifestyle_background_{timestamp}.png"
         with open(bg_path, 'wb') as f:
@@ -2865,8 +2895,12 @@ No text or signs should be visible in the image. Photorealistic style."""
             "file_path": str(bg_path)
         })
         
+    except ImportError as e:
+        logging.error(f"Import error: {e}")
+        return jsonify({"success": False, "error": f"Missing dependency: {e}"}), 500
     except Exception as e:
         logging.error(f"Failed to generate lifestyle background: {e}")
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
 
