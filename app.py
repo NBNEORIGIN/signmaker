@@ -226,6 +226,27 @@ HTML_TEMPLATE = '''
         <div id="generate-panel" class="panel">
             <div class="card">
                 <h2>Generate Images & Content</h2>
+                
+                <!-- Step 1: Product Summary -->
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <h3 style="margin: 0 0 10px 0;">📋 Product Summary</h3>
+                    <div id="product-summary" style="font-size: 13px; color: #555;">
+                        <em>Loading product summary...</em>
+                    </div>
+                </div>
+                
+                <!-- Step 2: Sample Images for AI Context -->
+                <div style="background: #f0f7ff; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <h3 style="margin: 0 0 10px 0;">🖼️ Sample Images for AI Context</h3>
+                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                        These images will be sent to the AI to help it understand your product range.
+                    </p>
+                    <div id="sample-images" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <em style="color: #888;">Loading sample images...</em>
+                    </div>
+                </div>
+                
+                <!-- Step 3: AI Prompt Configuration -->
                 <div class="form-row">
                     <div class="form-group">
                         <label>Product Theme (for AI)</label>
@@ -236,12 +257,37 @@ HTML_TEMPLATE = '''
                         <textarea id="use-cases" rows="3" placeholder="Where will this sign be used?"></textarea>
                     </div>
                 </div>
-                <div style="margin-top: 15px;">
+                
+                <!-- Step 4: AI System Prompt (editable) -->
+                <div class="form-group" style="margin-top: 15px;">
+                    <label>AI System Prompt (editable)</label>
+                    <textarea id="ai-system-prompt" rows="6" style="font-family: monospace; font-size: 11px;"></textarea>
+                    <button class="btn btn-secondary" onclick="resetSystemPrompt()" style="margin-top: 5px; font-size: 11px;">Reset to Default</button>
+                </div>
+                
+                <!-- Action Buttons -->
+                <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button class="btn btn-secondary" onclick="previewAIPrompt()">👁️ Preview Full Prompt</button>
                     <button class="btn btn-primary" onclick="generateImages()">🎨 Generate Images</button>
                     <button class="btn btn-success" onclick="generateContent()">📝 Generate Content</button>
                     <button class="btn btn-primary" onclick="runFullPipeline()">🚀 Run Full Pipeline</button>
                 </div>
-                <div id="generate-output" class="output-box" style="margin-top: 20px; display: none;"></div>
+                
+                <!-- AI Response Preview (editable before applying) -->
+                <div id="ai-response-section" style="display: none; margin-top: 20px;">
+                    <h3>📝 AI Generated Content (Review & Edit)</h3>
+                    <textarea id="ai-response" rows="10" style="font-family: monospace; font-size: 11px; width: 100%;"></textarea>
+                    <div style="margin-top: 10px;">
+                        <button class="btn btn-success" onclick="applyAIContent()">✓ Apply Content</button>
+                        <button class="btn btn-secondary" onclick="discardAIContent()">✗ Discard</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Debug Terminal -->
+            <div class="card" style="margin-top: 20px;">
+                <h3 style="margin-bottom: 10px;">Debug Console</h3>
+                <div id="generate-debug-console" class="output-box" style="height: 200px; font-size: 11px;"></div>
             </div>
         </div>
         
@@ -1012,6 +1058,242 @@ HTML_TEMPLATE = '''
             }
         }
         
+        // ============ GENERATE TAB FUNCTIONS ============
+        
+        // Debug logging for Generate tab
+        function genLog(message, type = 'info') {
+            const console = document.getElementById('generate-debug-console');
+            if (!console) return;
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? '#f00' : type === 'success' ? '#0f0' : '#0ff';
+            console.innerHTML += `<span style="color: ${color}">[${timestamp}] ${message}</span>\n`;
+            console.scrollTop = console.scrollHeight;
+        }
+        
+        // Default system prompt
+        const DEFAULT_SYSTEM_PROMPT = `You are an expert product content writer for Amazon marketplace listings.
+You will be provided with:
+1. A summary of the product range (sizes, shapes, colors)
+2. Sample images showing the actual products
+3. Theme and use case information
+
+IMPORTANT: The products come in MULTIPLE sizes and shapes:
+- Rectangular signs: saville (115x95mm), dick (140x90mm), barzan (194x143mm), baby_jesus (290x190mm)
+- Circular signs: dracula (95mm diameter)
+- All signs come in 3 colors: silver, gold, and white
+
+Generate content that accurately describes ALL variants, not just one shape.
+Include dimensions in product descriptions.
+Write compelling Amazon-style titles and bullet points.`;
+
+        function resetSystemPrompt() {
+            document.getElementById('ai-system-prompt').value = DEFAULT_SYSTEM_PROMPT;
+            genLog('System prompt reset to default');
+        }
+        
+        // Load product summary and sample images when Generate tab is shown
+        function loadGenerateTabData() {
+            genLog('Loading product summary...');
+            
+            // Build product summary
+            const sizes = {};
+            const colors = new Set();
+            const descriptions = new Set();
+            
+            products.forEach(p => {
+                const size = p.size || 'unknown';
+                const color = p.color || 'unknown';
+                sizes[size] = (sizes[size] || 0) + 1;
+                colors.add(color);
+                if (p.description) descriptions.add(p.description);
+            });
+            
+            // Size dimensions
+            const sizeDims = {
+                'saville': '115x95mm (rectangular)',
+                'dick': '140x90mm (rectangular)',
+                'barzan': '194x143mm (rectangular)',
+                'dracula': '95mm diameter (circular)',
+                'baby_jesus': '290x190mm (rectangular)'
+            };
+            
+            let summaryHTML = `<strong>Total Products:</strong> ${products.length}<br>`;
+            summaryHTML += `<strong>Colors:</strong> ${Array.from(colors).join(', ')}<br>`;
+            summaryHTML += `<strong>Sizes:</strong><br>`;
+            for (const [size, count] of Object.entries(sizes)) {
+                const dims = sizeDims[size] || 'unknown dimensions';
+                summaryHTML += `&nbsp;&nbsp;• ${size}: ${count} products - ${dims}<br>`;
+            }
+            summaryHTML += `<strong>Product Types:</strong> ${descriptions.size} unique designs`;
+            
+            document.getElementById('product-summary').innerHTML = summaryHTML;
+            genLog(`Found ${products.length} products across ${Object.keys(sizes).length} sizes`, 'success');
+            
+            // Load sample images - one of each size (silver only for variety)
+            const sampleImages = [];
+            const seenSizes = new Set();
+            
+            for (const p of products) {
+                if (p.color === 'silver' && !seenSizes.has(p.size)) {
+                    sampleImages.push(p);
+                    seenSizes.add(p.size);
+                }
+                if (sampleImages.length >= 5) break;
+            }
+            
+            let imagesHTML = '';
+            for (const p of sampleImages) {
+                imagesHTML += `
+                    <div style="text-align: center;">
+                        <img src="/api/preview/${p.m_number}?t=${Date.now()}" 
+                             style="width: 100px; height: 80px; object-fit: contain; border: 1px solid #ddd; border-radius: 4px; background: white;">
+                        <div style="font-size: 10px; color: #666;">${p.size}</div>
+                    </div>
+                `;
+            }
+            
+            if (imagesHTML) {
+                document.getElementById('sample-images').innerHTML = imagesHTML;
+                genLog(`Loaded ${sampleImages.length} sample images for AI context`, 'success');
+            } else {
+                document.getElementById('sample-images').innerHTML = '<em style="color: #888;">No products available</em>';
+            }
+            
+            // Set default system prompt if empty
+            const promptField = document.getElementById('ai-system-prompt');
+            if (!promptField.value) {
+                promptField.value = DEFAULT_SYSTEM_PROMPT;
+            }
+        }
+        
+        function previewAIPrompt() {
+            const theme = document.getElementById('theme').value || '(not specified)';
+            const useCases = document.getElementById('use-cases').value || '(not specified)';
+            const systemPrompt = document.getElementById('ai-system-prompt').value;
+            const summary = document.getElementById('product-summary').innerText;
+            
+            const fullPrompt = `=== SYSTEM PROMPT ===
+${systemPrompt}
+
+=== PRODUCT SUMMARY ===
+${summary}
+
+=== USER INPUT ===
+Theme: ${theme}
+Use Cases: ${useCases}
+
+=== SAMPLE IMAGES ===
+[${document.querySelectorAll('#sample-images img').length} images will be attached]`;
+            
+            alert(fullPrompt);
+            genLog('Previewed full AI prompt');
+        }
+        
+        async function generateContent() {
+            genLog('Starting content generation...');
+            const btn = event.target;
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Generating...';
+            
+            try {
+                const theme = document.getElementById('theme').value;
+                const useCases = document.getElementById('use-cases').value;
+                const systemPrompt = document.getElementById('ai-system-prompt').value;
+                
+                // Get sample image M numbers
+                const sampleMNumbers = Array.from(document.querySelectorAll('#sample-images img'))
+                    .map(img => {
+                        const match = img.src.match(/\/api\/preview\/([^?]+)/);
+                        return match ? match[1] : null;
+                    })
+                    .filter(Boolean);
+                
+                genLog(`Sending ${sampleMNumbers.length} sample images to AI...`);
+                
+                const resp = await fetch('/api/generate/content', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        theme,
+                        use_cases: useCases,
+                        system_prompt: systemPrompt,
+                        sample_m_numbers: sampleMNumbers
+                    })
+                });
+                
+                const data = await resp.json();
+                
+                if (data.success) {
+                    genLog('Content generated successfully!', 'success');
+                    document.getElementById('ai-response').value = data.content;
+                    document.getElementById('ai-response-section').style.display = 'block';
+                } else {
+                    genLog(`Error: ${data.error}`, 'error');
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                genLog(`Error: ${e.message}`, 'error');
+                console.error('Failed to generate content:', e);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '📝 Generate Content';
+            }
+        }
+        
+        function applyAIContent() {
+            const content = document.getElementById('ai-response').value;
+            genLog('Applying AI content...');
+            // TODO: Parse and apply content to products
+            alert('Content applied! (Implementation pending)');
+            document.getElementById('ai-response-section').style.display = 'none';
+        }
+        
+        function discardAIContent() {
+            document.getElementById('ai-response-section').style.display = 'none';
+            genLog('AI content discarded');
+        }
+        
+        async function generateImages() {
+            genLog('Starting image generation...');
+            const btn = event.target;
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Generating...';
+            
+            try {
+                const resp = await fetch('/api/generate/images', {method: 'POST'});
+                const data = await resp.json();
+                
+                if (data.success) {
+                    genLog(`Generated images for ${data.count} products`, 'success');
+                    alert(`Generated images for ${data.count} products`);
+                } else {
+                    genLog(`Error: ${data.error}`, 'error');
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                genLog(`Error: ${e.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🎨 Generate Images';
+            }
+        }
+        
+        async function runFullPipeline() {
+            genLog('Starting full pipeline...');
+            await generateImages();
+            await generateContent();
+            genLog('Full pipeline complete', 'success');
+        }
+        
+        // Override showTab to load Generate tab data
+        const originalShowTab = showTab;
+        showTab = function(tabName) {
+            originalShowTab(tabName);
+            if (tabName === 'generate') {
+                loadGenerateTabData();
+            }
+        };
+        
         // Load products on page load
         loadProducts();
     </script>
@@ -1120,28 +1402,116 @@ def get_job_status(job_id):
 
 @app.route('/api/generate/content', methods=['POST'])
 def generate_content():
-    """Generate AI content for approved products."""
-    from content_generator import generate_content_job
+    """Generate AI content for products using Claude with sample images."""
+    import os
+    import base64
+    import logging
+    from image_generator import generate_product_image
     
-    theme = request.args.get('theme', '')
-    use_cases = request.args.get('use_cases', '')
+    data = request.json or {}
+    theme = data.get('theme', '')
+    use_cases = data.get('use_cases', '')
+    system_prompt = data.get('system_prompt', '')
+    sample_m_numbers = data.get('sample_m_numbers', [])
     
-    products = Product.approved()
-    if not products:
-        products = Product.all()
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return jsonify({"success": False, "error": "ANTHROPIC_API_KEY not set"}), 400
     
-    if not products:
-        return jsonify({"error": "No products to generate content for"}), 400
+    all_products = Product.all()
+    if not all_products:
+        return jsonify({"success": False, "error": "No products found"}), 400
     
-    job_id = submit_job(
-        f"Generate content for {len(products)} products",
-        generate_content_job,
-        products,
-        theme=theme,
-        use_cases=use_cases
-    )
-    
-    return jsonify({"job_id": job_id, "products": len(products)})
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        
+        # Build product summary
+        sizes = {}
+        colors = set()
+        descriptions = set()
+        
+        for p in all_products:
+            size = p.get('size', 'unknown')
+            color = p.get('color', 'unknown')
+            sizes[size] = sizes.get(size, 0) + 1
+            colors.add(color)
+            if p.get('description'):
+                descriptions.add(p['description'])
+        
+        size_dims = {
+            'saville': '115x95mm (rectangular)',
+            'dick': '140x90mm (rectangular)', 
+            'barzan': '194x143mm (rectangular)',
+            'dracula': '95mm diameter (circular)',
+            'baby_jesus': '290x190mm (rectangular)'
+        }
+        
+        summary = f"Total Products: {len(all_products)}\n"
+        summary += f"Colors: {', '.join(colors)}\n"
+        summary += "Sizes:\n"
+        for size, count in sizes.items():
+            dims = size_dims.get(size, 'unknown dimensions')
+            summary += f"  - {size}: {count} products - {dims}\n"
+        summary += f"Product Types: {len(descriptions)} unique designs"
+        
+        # Build message content with images
+        content = []
+        
+        # Add sample images
+        for m_number in sample_m_numbers[:5]:  # Limit to 5 images
+            product = Product.get(m_number)
+            if product:
+                try:
+                    png_bytes = generate_product_image(product, "main")
+                    img_base64 = base64.b64encode(png_bytes).decode()
+                    content.append({
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": img_base64
+                        }
+                    })
+                    logging.info(f"Added sample image for {m_number}")
+                except Exception as e:
+                    logging.warning(f"Failed to generate sample image for {m_number}: {e}")
+        
+        # Add text prompt
+        user_prompt = f"""=== PRODUCT SUMMARY ===
+{summary}
+
+=== USER INPUT ===
+Theme: {theme or '(not specified)'}
+Use Cases: {use_cases or '(not specified)'}
+
+Please generate Amazon marketplace content for these products. Include:
+1. Product titles (under 200 characters)
+2. 5 bullet points per product
+3. Product descriptions
+
+Remember: These products come in MULTIPLE sizes and shapes as shown in the images and summary above."""
+
+        content.append({"type": "text", "text": user_prompt})
+        
+        # Call Claude API
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4096,
+            system=system_prompt or "You are an expert product content writer for Amazon marketplace listings.",
+            messages=[{"role": "user", "content": content}]
+        )
+        
+        generated_content = response.content[0].text
+        
+        return jsonify({
+            "success": True,
+            "content": generated_content
+        })
+        
+    except Exception as e:
+        logging.error(f"Failed to generate content: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/generate/full', methods=['POST'])
