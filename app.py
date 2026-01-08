@@ -1210,11 +1210,17 @@ Write compelling Amazon-style titles and bullet points.`;
                 genLog(`Sending ${sampleMNumbers.length} images for analysis...`);
                 startProgress('Waiting for AI response');
                 
+                // Add 2 minute timeout for AI analysis
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 120000);
+                
                 const resp = await fetch('/api/analyze/products', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ sample_m_numbers: sampleMNumbers })
+                    body: JSON.stringify({ sample_m_numbers: sampleMNumbers }),
+                    signal: controller.signal
                 });
+                clearTimeout(timeout);
                 
                 const data = await resp.json();
                 
@@ -1230,10 +1236,17 @@ Write compelling Amazon-style titles and bullet points.`;
                     genLog(`Analysis failed: ${data.error}`, 'error');
                 }
             } catch (e) {
-                status.textContent = 'Error analyzing products';
-                status.style.color = 'red';
-                genLog(`Analysis error: ${e.message}`, 'error');
+                if (e.name === 'AbortError') {
+                    status.textContent = 'Request timed out - try again';
+                    status.style.color = 'red';
+                    genLog('Analysis timed out after 2 minutes', 'error');
+                } else {
+                    status.textContent = 'Error analyzing products';
+                    status.style.color = 'red';
+                    genLog(`Analysis error: ${e.message}`, 'error');
+                }
             } finally {
+                stopProgress();
                 btn.disabled = false;
                 btn.innerHTML = '🔍 Analyze Products with AI';
             }
@@ -1433,10 +1446,13 @@ Use Cases: ${useCases}
                     throw new Error(imgData.error || 'Image generation failed');
                 }
                 
-                // Step 2: Generate AI content
-                genLog('Step 2: Generating AI content...');
-                progressDetails.innerHTML += '🤖 Generating AI content...<br>';
+                // Step 2: Generate AI content (with 2 minute timeout)
+                genLog('Step 2: Generating AI content (may take up to 2 minutes)...');
+                progressDetails.innerHTML += '🤖 Generating AI content (may take up to 2 minutes)...<br>';
                 startProgress('Waiting for AI response');
+                
+                const contentController = new AbortController();
+                const contentTimeout = setTimeout(() => contentController.abort(), 120000);
                 
                 const contentResp = await fetch('/api/generate/content', {
                     method: 'POST',
@@ -1446,8 +1462,10 @@ Use Cases: ${useCases}
                         use_cases: useCases,
                         system_prompt: systemPrompt,
                         sample_m_numbers: sampleMNumbers
-                    })
+                    }),
+                    signal: contentController.signal
                 });
+                clearTimeout(contentTimeout);
                 
                 const contentData = await contentResp.json();
                 
@@ -1486,11 +1504,18 @@ Use Cases: ${useCases}
                 }
                 
             } catch (e) {
-                genLog(`Error: ${e.message}`, 'error');
-                progressDetails.innerHTML += `❌ Error: ${e.message}<br>`;
-                status.textContent = 'Error - see console';
+                if (e.name === 'AbortError') {
+                    genLog('Request timed out after 2 minutes - try again', 'error');
+                    progressDetails.innerHTML += `❌ Request timed out - AI may be slow, try again<br>`;
+                    status.textContent = 'Timeout - try again';
+                } else {
+                    genLog(`Error: ${e.message}`, 'error');
+                    progressDetails.innerHTML += `❌ Error: ${e.message}<br>`;
+                    status.textContent = 'Error - see console';
+                }
                 status.style.color = 'red';
             } finally {
+                stopProgress();
                 btn.disabled = false;
                 btn.innerHTML = '📦 Generate Amazon Content & Images';
             }
