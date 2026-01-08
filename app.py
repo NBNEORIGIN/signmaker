@@ -235,9 +235,22 @@ HTML_TEMPLATE = '''
         <!-- Export Tab -->
         <div id="export-panel" class="panel">
             <div class="card">
-                <h2>Export Flatfile</h2>
-                <p style="margin-bottom: 15px; color: #666;">Generate Amazon flatfile for approved products.</p>
-                <button class="btn btn-success" onclick="exportFlatfile()">📥 Download Amazon Flatfile</button>
+                <h2>Export Products</h2>
+                <p style="margin-bottom: 15px; color: #666;">Export approved products to various platforms.</p>
+                
+                <h3 style="margin-top: 20px;">Marketplace Flatfiles</h3>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
+                    <button class="btn btn-success" onclick="exportFlatfile()">📥 Amazon Flatfile</button>
+                    <button class="btn btn-primary" onclick="exportEbay()">📥 eBay CSV</button>
+                    <button class="btn btn-warning" onclick="exportEtsy()">📥 Etsy Shop Uploader</button>
+                </div>
+                
+                <h3>Image Downloads</h3>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button class="btn btn-secondary" onclick="exportAllImages()">📦 Download All Images (ZIP)</button>
+                </div>
+                <p style="margin-top: 10px; color: #888; font-size: 12px;">Individual product images can be downloaded from the Products tab.</p>
+                
                 <div id="export-status" style="margin-top: 15px;"></div>
             </div>
         </div>
@@ -341,6 +354,7 @@ HTML_TEMPLATE = '''
                     <td><span class="status-badge status-${p.qa_status || 'pending'}">${p.qa_status || 'pending'}</span></td>
                     <td>
                         <button class="btn btn-secondary" onclick="editProduct('${p.m_number}')" style="padding: 5px 10px;">Edit</button>
+                        <button class="btn btn-primary" onclick="downloadProductImages('${p.m_number}')" style="padding: 5px 10px;">📦</button>
                         <button class="btn btn-danger" onclick="deleteProduct('${p.m_number}')" style="padding: 5px 10px;">Delete</button>
                     </td>
                 </tr>
@@ -497,7 +511,7 @@ HTML_TEMPLATE = '''
         
         async function exportFlatfile() {
             const status = document.getElementById('export-status');
-            status.innerHTML = '<div class="alert alert-info">Generating flatfile...</div>';
+            status.innerHTML = '<div class="alert alert-info">Generating Amazon flatfile...</div>';
             
             try {
                 const resp = await fetch('/api/export/flatfile', {method: 'POST'});
@@ -508,13 +522,83 @@ HTML_TEMPLATE = '''
                     a.href = url;
                     a.download = `amazon_flatfile_${new Date().toISOString().slice(0,10)}.xlsx`;
                     a.click();
-                    status.innerHTML = '<div class="alert alert-success">Flatfile downloaded!</div>';
+                    status.innerHTML = '<div class="alert alert-success">Amazon flatfile downloaded!</div>';
                 } else {
                     status.innerHTML = '<div class="alert alert-error">Failed to generate flatfile</div>';
                 }
             } catch (e) {
                 status.innerHTML = `<div class="alert alert-error">Error: ${e.message}</div>`;
             }
+        }
+        
+        async function exportEbay() {
+            const status = document.getElementById('export-status');
+            status.innerHTML = '<div class="alert alert-info">Generating eBay CSV...</div>';
+            
+            try {
+                const resp = await fetch('/api/export/ebay', {method: 'POST'});
+                if (resp.ok) {
+                    const blob = await resp.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `ebay_listings_${new Date().toISOString().slice(0,10)}.csv`;
+                    a.click();
+                    status.innerHTML = '<div class="alert alert-success">eBay CSV downloaded!</div>';
+                } else {
+                    status.innerHTML = '<div class="alert alert-error">Failed to generate eBay CSV</div>';
+                }
+            } catch (e) {
+                status.innerHTML = `<div class="alert alert-error">Error: ${e.message}</div>`;
+            }
+        }
+        
+        async function exportEtsy() {
+            const status = document.getElementById('export-status');
+            status.innerHTML = '<div class="alert alert-info">Generating Etsy Shop Uploader...</div>';
+            
+            try {
+                const resp = await fetch('/api/export/etsy', {method: 'POST'});
+                if (resp.ok) {
+                    const blob = await resp.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `etsy_shop_uploader_${new Date().toISOString().slice(0,10)}.xlsx`;
+                    a.click();
+                    status.innerHTML = '<div class="alert alert-success">Etsy Shop Uploader downloaded!</div>';
+                } else {
+                    status.innerHTML = '<div class="alert alert-error">Failed to generate Etsy file</div>';
+                }
+            } catch (e) {
+                status.innerHTML = `<div class="alert alert-error">Error: ${e.message}</div>`;
+            }
+        }
+        
+        async function exportAllImages() {
+            const status = document.getElementById('export-status');
+            status.innerHTML = '<div class="alert alert-info">Generating images ZIP... This may take a while.</div>';
+            
+            try {
+                const resp = await fetch('/api/export/images', {method: 'POST'});
+                if (resp.ok) {
+                    const blob = await resp.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `product_images_${new Date().toISOString().slice(0,10)}.zip`;
+                    a.click();
+                    status.innerHTML = '<div class="alert alert-success">Images ZIP downloaded!</div>';
+                } else {
+                    status.innerHTML = '<div class="alert alert-error">Failed to generate images ZIP</div>';
+                }
+            } catch (e) {
+                status.innerHTML = `<div class="alert alert-error">Error: ${e.message}</div>`;
+            }
+        }
+        
+        async function downloadProductImages(mNumber) {
+            window.location.href = `/api/export/images/${mNumber}`;
         }
         
         // Load products on page load
@@ -664,6 +748,8 @@ def export_flatfile():
     import openpyxl
     
     products = Product.approved()
+    if not products:
+        products = Product.all()
     
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -689,6 +775,89 @@ def export_flatfile():
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         as_attachment=True,
         download_name=f'amazon_flatfile_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
+    )
+
+
+@app.route('/api/export/ebay', methods=['POST'])
+def export_ebay():
+    """Export eBay File Exchange CSV."""
+    from export_ebay import generate_ebay_csv
+    from config import R2_PUBLIC_URL
+    
+    products = Product.approved()
+    if not products:
+        products = Product.all()
+    
+    csv_content = generate_ebay_csv(products, R2_PUBLIC_URL)
+    
+    return Response(
+        csv_content,
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename=ebay_listings_{datetime.now().strftime("%Y%m%d_%H%M")}.csv'}
+    )
+
+
+@app.route('/api/export/etsy', methods=['POST'])
+def export_etsy():
+    """Export Etsy Shop Uploader XLSX."""
+    from export_etsy import generate_etsy_xlsx
+    from config import R2_PUBLIC_URL
+    from io import BytesIO
+    
+    products = Product.approved()
+    if not products:
+        products = Product.all()
+    
+    xlsx_bytes = generate_etsy_xlsx(products, R2_PUBLIC_URL)
+    
+    return send_file(
+        BytesIO(xlsx_bytes),
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'etsy_shop_uploader_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
+    )
+
+
+@app.route('/api/export/images/<m_number>', methods=['GET'])
+def export_product_images(m_number):
+    """Download all images for a single product as ZIP."""
+    from export_images import generate_single_product_zip
+    from io import BytesIO
+    
+    product = Product.get(m_number)
+    if not product:
+        return jsonify({"error": "Product not found"}), 404
+    
+    zip_bytes = generate_single_product_zip(product)
+    
+    return send_file(
+        BytesIO(zip_bytes),
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f'{m_number}_images.zip'
+    )
+
+
+@app.route('/api/export/images', methods=['POST'])
+def export_all_images():
+    """Download all product images as ZIP (approved products)."""
+    from export_images import generate_images_zip
+    from io import BytesIO
+    
+    products = Product.approved()
+    if not products:
+        products = Product.all()
+    
+    if not products:
+        return jsonify({"error": "No products to export"}), 400
+    
+    zip_bytes = generate_images_zip(products)
+    
+    return send_file(
+        BytesIO(zip_bytes),
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f'product_images_{datetime.now().strftime("%Y%m%d_%H%M")}.zip'
     )
 
 
