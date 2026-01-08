@@ -781,12 +781,29 @@ HTML_TEMPLATE = '''
             const a = document.createElement('a');
             a.href = url;
             a.download = 'product_template.csv';
+            a.style.display = 'none';
+            document.body.appendChild(a);
             a.click();
+            document.body.removeChild(a);
             URL.revokeObjectURL(url);
         }
         
-        function downloadSvgTemplate() {
-            window.location.href = '/api/templates/svg';
+        async function downloadSvgTemplate() {
+            try {
+                const resp = await fetch('/api/templates/svg');
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'icon_template_100mm.svg';
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                alert('Error downloading SVG template: ' + e.message);
+            }
         }
         
         function handleDragOver(e) {
