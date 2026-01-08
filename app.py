@@ -771,39 +771,11 @@ HTML_TEMPLATE = '''
         // ============ TEMPLATE DOWNLOAD & IMPORT FUNCTIONS ============
         
         function downloadProductTemplate() {
-            const csvContent = 'm_number,description,size,color,ean,icon_files,orientation\n' +
-                'M1001,Example Sign,saville,silver,5060000000001,icon.svg,landscape\n' +
-                'M1002,Example Sign,saville,gold,5060000000002,icon.svg,landscape\n' +
-                'M1003,Example Sign,saville,white,5060000000003,icon.svg,landscape\n';
-            
-            const blob = new Blob([csvContent], {type: 'text/csv'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'product_template.csv';
-            a.style.display = 'none';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            window.open('/api/templates/csv', '_blank');
         }
         
-        async function downloadSvgTemplate() {
-            try {
-                const resp = await fetch('/api/templates/svg');
-                const blob = await resp.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'icon_template_100mm.svg';
-                a.style.display = 'none';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            } catch (e) {
-                alert('Error downloading SVG template: ' + e.message);
-            }
+        function downloadSvgTemplate() {
+            window.open('/api/templates/svg', '_blank');
         }
         
         function handleDragOver(e) {
@@ -2366,6 +2338,21 @@ def clear_all_products():
     """Delete all products."""
     Product.clear_all()
     return jsonify({"success": True})
+
+
+@app.route('/api/templates/csv')
+def download_csv_template():
+    """Download a CSV template for product data."""
+    csv_content = '''m_number,description,size,color,ean,icon_files,orientation
+M1001,Example Sign,saville,silver,5060000000001,icon.svg,landscape
+M1002,Example Sign,saville,gold,5060000000002,icon.svg,landscape
+M1003,Example Sign,saville,white,5060000000003,icon.svg,landscape
+'''
+    return Response(
+        csv_content,
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=product_template.csv'}
+    )
 
 
 @app.route('/api/templates/svg')
