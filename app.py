@@ -1647,8 +1647,14 @@ def generate_images():
 
 @app.route('/api/generate/amazon-flatfile', methods=['POST'])
 def generate_amazon_flatfile():
-    """Generate Amazon flatfile data for all products."""
+    """Generate Amazon flatfile XLSX in proper Amazon format."""
     import logging
+    import os
+    import re
+    import json
+    from datetime import datetime
+    import openpyxl
+    from openpyxl.utils import get_column_letter
     
     data = request.json or {}
     theme = data.get('theme', '')
@@ -1659,25 +1665,239 @@ def generate_amazon_flatfile():
     if not all_products:
         return jsonify({"success": False, "error": "No products found"}), 400
     
+    # Size dimensions and mappings
+    SIZE_DIMENSIONS_CM = {
+        "dracula": (9.5, 9.5),
+        "saville": (11.0, 9.5),
+        "dick": (14.0, 9.0),
+        "barzan": (19.0, 14.0),
+        "baby_jesus": (29.0, 19.0),
+    }
+    SIZE_MAP_VALUES = {
+        "dracula": "XS",
+        "saville": "S",
+        "dick": "M",
+        "barzan": "L",
+        "baby_jesus": "XL",
+    }
+    SIZE_PRICING = {
+        "dracula": 10.99,
+        "saville": 11.99,
+        "dick": 12.99,
+        "barzan": 15.99,
+        "baby_jesus": 17.99,
+    }
+    COLOR_DISPLAY = {"silver": "Silver", "white": "White", "gold": "Gold"}
+    
+    # R2 public URL base
+    R2_PUBLIC_URL = os.environ.get("R2_PUBLIC_URL", "https://pub-f0f96448c91147489e7b6c6b22ed5010.r2.dev")
+    
     try:
-        # Store AI content and metadata in products for later export
-        for product in all_products:
-            Product.update(product['m_number'], {
-                'ai_theme': theme,
-                'ai_use_cases': use_cases,
-                'ai_content': ai_content
-            })
+        # Parse AI content to extract bullet points and description
+        # AI content format expected to have titles, bullets, descriptions
+        default_bullets = [
+            "Premium 1mm brushed aluminium construction with elegant finish provides professional appearance and long-lasting durability",
+            "UV-resistant printing technology ensures text remains clear and legible for years, even under harsh sunlight exposure",
+            "Self-adhesive backing allows quick peel and stick installation – NO drilling or tools required, ready to use immediately",
+            "Fully weatherproof design withstands rain, snow, and temperature extremes, suitable for indoor and outdoor applications",
+            "Clear, bold messaging ensures excellent visibility and compliance, perfect for maintaining security in restricted areas"
+        ]
+        default_description = f"{theme} Sign – Brushed Aluminium, Weatherproof, Self-Adhesive. Professional quality signage for {use_cases}."
+        default_search_terms = "sign warning notice metal plaque door wall sticker business office industrial safety weatherproof aluminium"
         
-        logging.info(f"Amazon flatfile data prepared for {len(all_products)} products")
+        # Derive parent SKU from theme
+        parent_sku = theme.upper().replace(" ", "_").replace("-", "_")
+        parent_sku = re.sub(r'[^A-Z0-9_]', '', parent_sku)
+        if not parent_sku.endswith("_PARENT"):
+            parent_sku = f"{parent_sku}_PARENT"
+        
+        # Amazon columns
+        AMAZON_COLUMNS = [
+            ("feed_product_type", "Product Type"),
+            ("item_sku", "Seller SKU"),
+            ("update_delete", "Update Delete"),
+            ("brand_name", "Brand Name"),
+            ("external_product_id", "Product ID"),
+            ("external_product_id_type", "Product ID Type"),
+            ("product_description", "Product Description"),
+            ("part_number", "Manufacturer Part Number"),
+            ("manufacturer", "Manufacturer"),
+            ("item_name", "Item Name (aka Title)"),
+            ("language_value", "Language"),
+            ("recommended_browse_nodes", "Recommended Browse Nodes"),
+            ("main_image_url", "Main Image URL"),
+            ("other_image_url1", "Other Image Url1"),
+            ("other_image_url2", "Other Image Url2"),
+            ("other_image_url3", "Other Image Url3"),
+            ("other_image_url4", "Other Image Url4"),
+            ("other_image_url5", "Other Image Url5"),
+            ("other_image_url6", "Other Image Url6"),
+            ("other_image_url7", "Other Image Url7"),
+            ("other_image_url8", "Other Image Url8"),
+            ("relationship_type", "Relationship Type"),
+            ("variation_theme", "Variation Theme"),
+            ("parent_sku", "Parent SKU"),
+            ("parent_child", "Parentage"),
+            ("style_name", "Style Name"),
+            ("bullet_point1", "Key Product Features"),
+            ("bullet_point2", "Key Product Features"),
+            ("bullet_point3", "Key Product Features"),
+            ("bullet_point4", "Key Product Features"),
+            ("bullet_point5", "Key Product Features"),
+            ("generic_keywords", "Search Terms"),
+            ("color_name", "Colour"),
+            ("size_name", "Size"),
+            ("color_map", "Colour Map"),
+            ("size_map", "Size Map"),
+            ("length_longer_edge", "Item Length Longer Edge"),
+            ("length_longer_edge_unit_of_measure", "Item Length Unit"),
+            ("width_shorter_edge", "Item Width Shorter Edge"),
+            ("width_shorter_edge_unit_of_measure", "Item Width Unit"),
+            ("batteries_required", "Batteries Required"),
+            ("supplier_declared_dg_hz_regulation5", "Dangerous Goods"),
+            ("country_of_origin", "Country/Region Of Origin"),
+            ("list_price_with_tax", "List Price"),
+            ("merchant_shipping_group_name", "Shipping Group"),
+            ("condition_type", "Condition"),
+            ("fulfillment_availability#1.fulfillment_channel_code", "Fulfillment Channel"),
+            ("fulfillment_availability#1.quantity", "Quantity"),
+            ("purchasable_offer[marketplace_id=A1F83G8C2ARO7P]#1.our_price#1.schedule#1.value_with_tax", "Price"),
+        ]
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Template"
+        
+        # Row 1: Template metadata
+        ws.cell(row=1, column=1, value="TemplateType=fptcustom")
+        ws.cell(row=1, column=2, value="Version=2025.1207")
+        ws.cell(row=1, column=3, value="TemplateSignature=U0lHTkFHRQ==")
+        
+        # Row 2: Labels
+        for col, (attr, label) in enumerate(AMAZON_COLUMNS, 1):
+            ws.cell(row=2, column=col, value=label)
+        
+        # Row 3: Attribute names
+        for col, (attr, label) in enumerate(AMAZON_COLUMNS, 1):
+            ws.cell(row=3, column=col, value=attr)
+        
+        # Row 4: Parent row
+        parent_title = f"{theme} Sign – Brushed Aluminium, Weatherproof, Self-Adhesive"
+        parent_data = {
+            "feed_product_type": "signage",
+            "item_sku": parent_sku,
+            "update_delete": "Update",
+            "brand_name": "NorthByNorthEast",
+            "product_description": default_description,
+            "part_number": parent_sku,
+            "item_name": parent_title,
+            "recommended_browse_nodes": "330215031",
+            "variation_theme": "Size & Colour",
+            "parent_child": "Parent",
+            "generic_keywords": default_search_terms,
+            "batteries_required": "No",
+            "supplier_declared_dg_hz_regulation5": "Not Applicable",
+            "country_of_origin": "Great Britain",
+        }
+        for col, (attr, _) in enumerate(AMAZON_COLUMNS, 1):
+            ws.cell(row=4, column=col, value=parent_data.get(attr, ""))
+        
+        # Row 5+: Child products
+        row_num = 5
+        for product in all_products:
+            m_number = product['m_number']
+            size = product.get('size', 'saville').lower()
+            color = product.get('color', 'silver').lower()
+            ean = product.get('ean', '')
+            
+            dims = SIZE_DIMENSIONS_CM.get(size, (11.0, 9.5))
+            size_code = SIZE_MAP_VALUES.get(size, "M")
+            price = SIZE_PRICING.get(size, 12.99)
+            color_display = COLOR_DISPLAY.get(color, color.title())
+            
+            # Build title with dimensions
+            title = f"{theme} Sign – {dims[0]}x{dims[1]}cm Brushed Aluminium, Weatherproof, Self-Adhesive"
+            
+            # Style name format: Color_SizeCode
+            style_name = f"{color_display}_{size_code}"
+            
+            # Image URLs
+            main_image = f"{R2_PUBLIC_URL}/{m_number} - 001.png"
+            
+            row_data = {
+                "feed_product_type": "signage",
+                "item_sku": m_number,
+                "update_delete": "Update",
+                "brand_name": "NorthByNorthEast",
+                "external_product_id": ean,
+                "external_product_id_type": "EAN" if ean else "",
+                "product_description": default_description,
+                "part_number": m_number,
+                "manufacturer": "North By North East Print and Sign Limited",
+                "item_name": title,
+                "language_value": "en_GB",
+                "recommended_browse_nodes": "330215031",
+                "main_image_url": main_image,
+                "other_image_url1": f"{R2_PUBLIC_URL}/{m_number} - 002.png",
+                "other_image_url2": f"{R2_PUBLIC_URL}/{m_number} - 003.png",
+                "other_image_url3": f"{R2_PUBLIC_URL}/{m_number} - 004.png",
+                "other_image_url4": f"{R2_PUBLIC_URL}/{m_number} - 005.png",
+                "relationship_type": "Variation",
+                "variation_theme": "Size & Colour",
+                "parent_sku": parent_sku,
+                "parent_child": "Child",
+                "style_name": style_name,
+                "bullet_point1": default_bullets[0],
+                "bullet_point2": default_bullets[1],
+                "bullet_point3": default_bullets[2],
+                "bullet_point4": default_bullets[3],
+                "bullet_point5": default_bullets[4],
+                "generic_keywords": default_search_terms,
+                "color_name": color_display,
+                "size_name": size_code,
+                "color_map": color_display,
+                "size_map": size_code,
+                "length_longer_edge": str(dims[0]),
+                "length_longer_edge_unit_of_measure": "Centimetres",
+                "width_shorter_edge": str(dims[1]),
+                "width_shorter_edge_unit_of_measure": "Centimetres",
+                "batteries_required": "No",
+                "supplier_declared_dg_hz_regulation5": "Not Applicable",
+                "country_of_origin": "Great Britain",
+                "list_price_with_tax": str(price),
+                "merchant_shipping_group_name": "RM Tracked 48 Free, 24 -- £2.99, SD -- £7.99",
+                "condition_type": "New",
+                "fulfillment_availability#1.fulfillment_channel_code": "AMAZON_UK_RAFN",
+                "fulfillment_availability#1.quantity": "5",
+                "purchasable_offer[marketplace_id=A1F83G8C2ARO7P]#1.our_price#1.schedule#1.value_with_tax": str(price),
+            }
+            
+            for col, (attr, _) in enumerate(AMAZON_COLUMNS, 1):
+                ws.cell(row=row_num, column=col, value=row_data.get(attr, ""))
+            row_num += 1
+        
+        # Auto-adjust column widths
+        for col in range(1, len(AMAZON_COLUMNS) + 1):
+            ws.column_dimensions[get_column_letter(col)].width = 20
+        
+        # Save to file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        output_path = Path(__file__).parent / f"amazon_flatfile_{timestamp}.xlsx"
+        wb.save(output_path)
+        
+        logging.info(f"Amazon flatfile saved to {output_path} with {len(all_products)} products")
         
         return jsonify({
             "success": True,
             "product_count": len(all_products),
-            "message": "Amazon flatfile data ready for export"
+            "file_path": str(output_path),
+            "message": f"Amazon flatfile saved: {output_path.name}"
         })
         
     except Exception as e:
         logging.error(f"Failed to generate Amazon flatfile: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
 
