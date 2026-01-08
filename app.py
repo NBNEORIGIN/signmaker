@@ -314,36 +314,53 @@ HTML_TEMPLATE = '''
         <div id="export-panel" class="panel">
             <div class="card">
                 <h2>Export Products</h2>
-                <p style="margin-bottom: 15px; color: #666;">Export approved products to various platforms.</p>
+                <p style="margin-bottom: 15px; color: #666;">Generate lifestyle images and export to all marketplaces.</p>
                 
-                <h3 style="margin-top: 20px;">Marketplace Exports</h3>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
-                    <button class="btn btn-success" onclick="exportFlatfile()">📥 Amazon Flatfile</button>
-                    <button class="btn btn-warning" onclick="exportEtsy()">📥 Etsy Shop Uploader</button>
+                <!-- Step 1: Generate Lifestyle Images -->
+                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <h3 style="margin: 0 0 10px 0;">🎨 Step 1: Generate Lifestyle Images</h3>
+                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                        Generate an AI background image, then overlay each product's transparent PNG to create lifestyle images.
+                    </p>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                        <button class="btn btn-warning" onclick="generateLifestyleBackground()" id="btn-lifestyle-bg">🖼️ Generate Background</button>
+                        <button class="btn btn-primary" onclick="generateAllLifestyleImages()" id="btn-lifestyle-all" disabled>📸 Create Lifestyle Images</button>
+                    </div>
+                    <div id="lifestyle-preview" style="margin-top: 15px; display: none;">
+                        <p style="font-size: 12px; font-weight: bold;">Background Preview:</p>
+                        <img id="lifestyle-bg-preview" style="max-width: 300px; border-radius: 8px; border: 1px solid #ddd;">
+                    </div>
+                    <span id="lifestyle-status" style="margin-top: 10px; display: block; font-size: 12px;"></span>
                 </div>
                 
-                <h3>eBay API Publishing</h3>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 20px;">
-                    <button class="btn btn-primary" onclick="publishToEbay(true)">🛒 Publish to eBay (with Ads)</button>
-                    <button class="btn btn-secondary" onclick="publishToEbay(false)">🛒 Publish to eBay (no Ads)</button>
-                    <span style="color: #888; font-size: 12px;">Creates listings via eBay API with auto-promotion (5% ad rate)</span>
+                <!-- Step 2: Export to All Marketplaces -->
+                <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <h3 style="margin: 0 0 10px 0;">📦 Step 2: Export to All Marketplaces</h3>
+                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                        Generate Amazon flatfile, publish to eBay (with ads), and create Etsy shop uploader file.
+                    </p>
+                    <button class="btn btn-success btn-lg" onclick="exportAllMarketplaces()" id="btn-export-all" style="font-size: 16px; padding: 12px 24px;">
+                        🚀 Export to All Marketplaces
+                    </button>
+                    <span id="export-all-status" style="margin-left: 15px; font-size: 12px;"></span>
+                    <div id="export-progress" style="display: none; margin-top: 15px; background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 12px; font-family: monospace;"></div>
                 </div>
                 
-                <h3>M Number Folders (Staff)</h3>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <button class="btn btn-success" onclick="exportMNumberFolders()">📁 Download M Number Folders</button>
-                </div>
-                <p style="margin-top: 10px; color: #888; font-size: 12px;">
-                    Full directory structure for Google Drive: 001 Design/001 MASTER FILE (SVG), 002 Images (PNG/JPEG).
-                </p>
-                
-                <h3 style="margin-top: 20px;">AI Lifestyle Images</h3>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-                    <button class="btn btn-primary" onclick="generateLifestyleImages()">🎨 Generate Lifestyle Images</button>
-                    <span style="color: #888; font-size: 12px;">Uses DALL-E 3 to create contextual product scenes (requires OPENAI_API_KEY)</span>
+                <!-- Step 3: Download M Number Folders -->
+                <div style="background: #cce5ff; padding: 15px; border-radius: 8px;">
+                    <h3 style="margin: 0 0 10px 0;">📁 Step 3: Download M Number Folders</h3>
+                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                        Generate ZIP file with full directory structure for Google Drive: 001 Design/001 MASTER FILE (SVG), 002 Images (PNG/JPEG).
+                    </p>
+                    <button class="btn btn-primary" onclick="downloadMNumberFolders()" id="btn-download-folders">📥 Download M Number Folders (ZIP)</button>
+                    <span id="folders-status" style="margin-left: 15px; font-size: 12px;"></span>
                 </div>
                 
-                <div id="export-status" style="margin-top: 15px;"></div>
+                <!-- Debug Console -->
+                <div style="margin-top: 20px;">
+                    <h3 style="margin-bottom: 10px;">Debug Console</h3>
+                    <div id="export-debug-console" class="output-box" style="height: 150px; font-size: 11px;"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -1464,6 +1481,203 @@ Use Cases: ${useCases}
             }
         };
         
+        // ============ EXPORT TAB FUNCTIONS ============
+        
+        let lifestyleBackgroundUrl = null;
+        
+        function exportLog(message, type = 'info') {
+            const console = document.getElementById('export-debug-console');
+            if (!console) return;
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? '#f00' : type === 'success' ? '#0f0' : '#0ff';
+            console.innerHTML += `<span style="color: ${color}">[${timestamp}] ${message}</span>\n`;
+            console.scrollTop = console.scrollHeight;
+        }
+        
+        // Step 1: Generate lifestyle background with DALL-E
+        async function generateLifestyleBackground() {
+            const btn = document.getElementById('btn-lifestyle-bg');
+            const status = document.getElementById('lifestyle-status');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Generating...';
+            status.textContent = '';
+            exportLog('Generating lifestyle background with DALL-E...');
+            
+            try {
+                const resp = await fetch('/api/export/lifestyle-background', {method: 'POST'});
+                const data = await resp.json();
+                
+                if (data.success) {
+                    lifestyleBackgroundUrl = data.background_url;
+                    document.getElementById('lifestyle-bg-preview').src = data.background_url;
+                    document.getElementById('lifestyle-preview').style.display = 'block';
+                    document.getElementById('btn-lifestyle-all').disabled = false;
+                    status.textContent = '✓ Background generated!';
+                    status.style.color = 'green';
+                    exportLog('Background generated successfully', 'success');
+                } else {
+                    status.textContent = `Error: ${data.error}`;
+                    status.style.color = 'red';
+                    exportLog(`Error: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                status.textContent = 'Error generating background';
+                status.style.color = 'red';
+                exportLog(`Error: ${e.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🖼️ Generate Background';
+            }
+        }
+        
+        // Step 1b: Create lifestyle images for all products
+        async function generateAllLifestyleImages() {
+            const btn = document.getElementById('btn-lifestyle-all');
+            const status = document.getElementById('lifestyle-status');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Creating...';
+            exportLog('Creating lifestyle images for all products...');
+            
+            try {
+                const resp = await fetch('/api/export/lifestyle-images', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ background_url: lifestyleBackgroundUrl })
+                });
+                const data = await resp.json();
+                
+                if (data.success) {
+                    status.textContent = `✓ Created ${data.count} lifestyle images!`;
+                    status.style.color = 'green';
+                    exportLog(`Created ${data.count} lifestyle images`, 'success');
+                } else {
+                    status.textContent = `Error: ${data.error}`;
+                    status.style.color = 'red';
+                    exportLog(`Error: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                status.textContent = 'Error creating lifestyle images';
+                status.style.color = 'red';
+                exportLog(`Error: ${e.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '📸 Create Lifestyle Images';
+            }
+        }
+        
+        // Step 2: Export to all marketplaces
+        async function exportAllMarketplaces() {
+            const btn = document.getElementById('btn-export-all');
+            const status = document.getElementById('export-all-status');
+            const progress = document.getElementById('export-progress');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Exporting...';
+            status.textContent = '';
+            progress.style.display = 'block';
+            progress.innerHTML = '';
+            exportLog('Starting export to all marketplaces...');
+            
+            try {
+                // Get theme and use cases from Generate tab
+                const theme = document.getElementById('theme')?.value || '';
+                const useCases = document.getElementById('use-cases')?.value || '';
+                
+                // Step 2a: Amazon Flatfile
+                exportLog('Generating Amazon flatfile...');
+                progress.innerHTML += '📦 Amazon Flatfile...<br>';
+                const amazonResp = await fetch('/api/generate/amazon-flatfile', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ theme, use_cases: useCases })
+                });
+                const amazonData = await amazonResp.json();
+                if (amazonData.success) {
+                    progress.innerHTML += `✅ Amazon: ${amazonData.message}<br>`;
+                    exportLog('Amazon flatfile generated', 'success');
+                } else {
+                    throw new Error(`Amazon: ${amazonData.error}`);
+                }
+                
+                // Step 2b: eBay API (with ads)
+                exportLog('Publishing to eBay...');
+                progress.innerHTML += '🛒 eBay API...<br>';
+                const ebayResp = await fetch('/api/ebay/publish', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ with_ads: true })
+                });
+                const ebayData = await ebayResp.json();
+                if (ebayData.success) {
+                    progress.innerHTML += `✅ eBay: ${ebayData.count || 0} listings published<br>`;
+                    exportLog('eBay listings published', 'success');
+                } else {
+                    progress.innerHTML += `⚠️ eBay: ${ebayData.error || 'Check API setup'}<br>`;
+                    exportLog(`eBay warning: ${ebayData.error}`, 'error');
+                }
+                
+                // Step 2c: Etsy Shop Uploader
+                exportLog('Generating Etsy shop uploader...');
+                progress.innerHTML += '🧡 Etsy Shop Uploader...<br>';
+                const etsyResp = await fetch('/api/export/etsy', {method: 'POST'});
+                const etsyData = await etsyResp.json();
+                if (etsyData.success) {
+                    progress.innerHTML += `✅ Etsy: ${etsyData.message}<br>`;
+                    exportLog('Etsy shop uploader generated', 'success');
+                } else {
+                    progress.innerHTML += `⚠️ Etsy: ${etsyData.error || 'Error'}<br>`;
+                    exportLog(`Etsy warning: ${etsyData.error}`, 'error');
+                }
+                
+                progress.innerHTML += '<br><strong>Export complete!</strong>';
+                status.textContent = '✓ Complete!';
+                status.style.color = 'green';
+                exportLog('All marketplace exports complete', 'success');
+                
+            } catch (e) {
+                status.textContent = 'Error - see console';
+                status.style.color = 'red';
+                progress.innerHTML += `❌ Error: ${e.message}<br>`;
+                exportLog(`Error: ${e.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🚀 Export to All Marketplaces';
+            }
+        }
+        
+        // Step 3: Download M Number folders as ZIP
+        async function downloadMNumberFolders() {
+            const btn = document.getElementById('btn-download-folders');
+            const status = document.getElementById('folders-status');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Generating ZIP...';
+            status.textContent = '';
+            exportLog('Generating M Number folders ZIP...');
+            
+            try {
+                const resp = await fetch('/api/export/m-folders', {method: 'POST'});
+                const data = await resp.json();
+                
+                if (data.success) {
+                    // Trigger download
+                    window.location.href = `/api/export/m-folders/download?file=${encodeURIComponent(data.file_path)}`;
+                    status.textContent = '✓ Download started!';
+                    status.style.color = 'green';
+                    exportLog(`ZIP created: ${data.file_name}`, 'success');
+                } else {
+                    status.textContent = `Error: ${data.error}`;
+                    status.style.color = 'red';
+                    exportLog(`Error: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                status.textContent = 'Error generating ZIP';
+                status.style.color = 'red';
+                exportLog(`Error: ${e.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '📥 Download M Number Folders (ZIP)';
+            }
+        }
+        
         // Load products on page load
         loadProducts();
     </script>
@@ -2144,22 +2358,229 @@ def export_ebay():
 @app.route('/api/export/etsy', methods=['POST'])
 def export_etsy():
     """Export Etsy Shop Uploader XLSX."""
-    from export_etsy import generate_etsy_xlsx
-    from config import R2_PUBLIC_URL
+    import logging
+    from datetime import datetime
+    
+    try:
+        from export_etsy import generate_etsy_xlsx
+        from config import R2_PUBLIC_URL
+        
+        products = Product.approved()
+        if not products:
+            products = Product.all()
+        
+        if not products:
+            return jsonify({"success": False, "error": "No products found"}), 400
+        
+        xlsx_bytes = generate_etsy_xlsx(products, R2_PUBLIC_URL)
+        
+        # Save to file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        output_path = Path(__file__).parent / f"etsy_shop_uploader_{timestamp}.xlsx"
+        with open(output_path, 'wb') as f:
+            f.write(xlsx_bytes)
+        
+        return jsonify({
+            "success": True,
+            "product_count": len(products),
+            "file_path": str(output_path),
+            "message": f"Etsy file saved: {output_path.name}"
+        })
+    except Exception as e:
+        logging.error(f"Failed to generate Etsy file: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/export/lifestyle-background', methods=['POST'])
+def generate_lifestyle_background():
+    """Generate a lifestyle background image using DALL-E."""
+    import os
+    import logging
+    import requests
+    from datetime import datetime
+    
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return jsonify({"success": False, "error": "OPENAI_API_KEY not set"}), 400
+    
+    # Get theme from first product or request
+    data = request.json or {}
+    theme = data.get('theme', '')
+    
+    if not theme:
+        products = Product.all()
+        if products:
+            theme = products[0].get('description', 'safety sign')
+    
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        
+        prompt = f"""A professional lifestyle photograph showing a clean, modern interior space 
+where a {theme} would be displayed. The image should show a wall or door in an office, 
+warehouse, or commercial building setting. The lighting should be natural and professional. 
+Leave a clear, well-lit area on the wall where a sign could be placed. 
+No text or signs should be visible in the image. Photorealistic style."""
+        
+        response = client.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            size="1024x1024",
+            quality="standard",
+            n=1,
+        )
+        
+        image_url = response.data[0].url
+        
+        # Download and save the image locally
+        img_response = requests.get(image_url)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        bg_path = Path(__file__).parent / f"lifestyle_background_{timestamp}.png"
+        with open(bg_path, 'wb') as f:
+            f.write(img_response.content)
+        
+        logging.info(f"Lifestyle background saved to {bg_path}")
+        
+        return jsonify({
+            "success": True,
+            "background_url": f"/api/export/lifestyle-background/preview?file={bg_path.name}",
+            "file_path": str(bg_path)
+        })
+        
+    except Exception as e:
+        logging.error(f"Failed to generate lifestyle background: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/export/lifestyle-background/preview')
+def preview_lifestyle_background():
+    """Serve the lifestyle background image."""
+    file_name = request.args.get('file')
+    if not file_name:
+        return "File not specified", 400
+    
+    file_path = Path(__file__).parent / file_name
+    if not file_path.exists():
+        return "File not found", 404
+    
+    return send_file(file_path, mimetype='image/png')
+
+
+@app.route('/api/export/lifestyle-images', methods=['POST'])
+def generate_lifestyle_images():
+    """Generate lifestyle images by overlaying product PNGs on the background."""
+    import logging
+    from PIL import Image
     from io import BytesIO
+    from image_generator import generate_product_image
+    
+    data = request.json or {}
+    background_url = data.get('background_url', '')
+    
+    if not background_url:
+        return jsonify({"success": False, "error": "No background URL provided"}), 400
+    
+    # Extract file name from URL
+    file_name = background_url.split('file=')[-1] if 'file=' in background_url else ''
+    bg_path = Path(__file__).parent / file_name
+    
+    if not bg_path.exists():
+        return jsonify({"success": False, "error": "Background file not found"}), 400
+    
+    products = Product.all()
+    if not products:
+        return jsonify({"success": False, "error": "No products found"}), 400
+    
+    try:
+        # Load background image
+        background = Image.open(bg_path).convert('RGBA')
+        bg_width, bg_height = background.size
+        
+        count = 0
+        for product in products:
+            try:
+                # Generate transparent product image
+                png_bytes = generate_product_image(product, "main")
+                product_img = Image.open(BytesIO(png_bytes)).convert('RGBA')
+                
+                # Resize product to fit nicely (about 40% of background width)
+                target_width = int(bg_width * 0.4)
+                ratio = target_width / product_img.width
+                target_height = int(product_img.height * ratio)
+                product_img = product_img.resize((target_width, target_height), Image.Resampling.LANCZOS)
+                
+                # Create composite - position product in center-right area
+                composite = background.copy()
+                x_pos = int(bg_width * 0.55 - target_width // 2)
+                y_pos = int(bg_height * 0.45 - target_height // 2)
+                composite.paste(product_img, (x_pos, y_pos), product_img)
+                
+                # Save lifestyle image
+                lifestyle_path = Path(__file__).parent / f"{product['m_number']}_lifestyle.png"
+                composite.save(lifestyle_path, 'PNG')
+                count += 1
+                
+            except Exception as e:
+                logging.warning(f"Failed to create lifestyle for {product['m_number']}: {e}")
+        
+        return jsonify({
+            "success": True,
+            "count": count,
+            "message": f"Created {count} lifestyle images"
+        })
+        
+    except Exception as e:
+        logging.error(f"Failed to generate lifestyle images: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/export/m-folders', methods=['POST'])
+def export_m_folders_json():
+    """Generate M Number folders ZIP and return JSON with file path."""
+    import logging
+    from datetime import datetime
+    from export_images import generate_m_number_folder_zip
     
     products = Product.approved()
     if not products:
         products = Product.all()
     
-    xlsx_bytes = generate_etsy_xlsx(products, R2_PUBLIC_URL)
+    if not products:
+        return jsonify({"success": False, "error": "No products found"}), 400
     
-    return send_file(
-        BytesIO(xlsx_bytes),
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        as_attachment=True,
-        download_name=f'etsy_shop_uploader_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
-    )
+    try:
+        zip_bytes = generate_m_number_folder_zip(products)
+        
+        # Save to file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        output_path = Path(__file__).parent / f"m_number_folders_{timestamp}.zip"
+        with open(output_path, 'wb') as f:
+            f.write(zip_bytes)
+        
+        return jsonify({
+            "success": True,
+            "file_path": str(output_path),
+            "file_name": output_path.name,
+            "product_count": len(products)
+        })
+        
+    except Exception as e:
+        logging.error(f"Failed to generate M folders ZIP: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/export/m-folders/download')
+def download_m_folders():
+    """Download the generated M folders ZIP file."""
+    file_path = request.args.get('file')
+    if not file_path:
+        return "File not specified", 400
+    
+    path = Path(file_path)
+    if not path.exists():
+        return "File not found", 404
+    
+    return send_file(path, mimetype='application/zip', as_attachment=True, download_name=path.name)
 
 
 @app.route('/api/export/images/<m_number>', methods=['GET'])
