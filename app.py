@@ -1079,8 +1079,48 @@ HTML_TEMPLATE = '''
         
         // ============ GENERATE TAB FUNCTIONS ============
         
+        // Progress indicator management
+        let progressInterval = null;
+        let progressDots = 0;
+        let progressStartTime = null;
+        
+        function startProgress(message) {
+            stopProgress();
+            progressStartTime = Date.now();
+            progressDots = 0;
+            const console = document.getElementById('generate-debug-console');
+            if (!console) return;
+            
+            // Add initial message with progress span
+            const timestamp = new Date().toLocaleTimeString();
+            console.innerHTML += `<span style="color: #ff0" id="progress-line">[${timestamp}] ⏳ ${message} <span id="progress-dots"></span> <span id="progress-time"></span></span>\n`;
+            console.scrollTop = console.scrollHeight;
+            
+            // Update dots and elapsed time every 500ms
+            progressInterval = setInterval(() => {
+                progressDots = (progressDots + 1) % 4;
+                const dots = '.'.repeat(progressDots + 1);
+                const elapsed = Math.floor((Date.now() - progressStartTime) / 1000);
+                const dotsSpan = document.getElementById('progress-dots');
+                const timeSpan = document.getElementById('progress-time');
+                if (dotsSpan) dotsSpan.textContent = dots;
+                if (timeSpan) timeSpan.textContent = `(${elapsed}s)`;
+            }, 500);
+        }
+        
+        function stopProgress() {
+            if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+            }
+            // Remove the progress line
+            const progressLine = document.getElementById('progress-line');
+            if (progressLine) progressLine.remove();
+        }
+        
         // Debug logging for Generate tab
         function genLog(message, type = 'info') {
+            stopProgress(); // Stop any running progress indicator
             const console = document.getElementById('generate-debug-console');
             if (!console) return;
             const timestamp = new Date().toLocaleTimeString();
@@ -1127,6 +1167,7 @@ Write compelling Amazon-style titles and bullet points.`;
                     .filter(Boolean);
                 
                 genLog(`Sending ${sampleMNumbers.length} images for analysis...`);
+                startProgress('Waiting for AI response');
                 
                 const resp = await fetch('/api/analyze/products', {
                     method: 'POST',
@@ -1339,6 +1380,7 @@ Use Cases: ${useCases}
                 // Step 1: Generate images and upload to R2
                 genLog('Step 1: Generating product images...');
                 progressDetails.innerHTML += '📸 Generating product images...<br>';
+                startProgress('Generating images');
                 
                 const imgResp = await fetch('/api/generate/images', {method: 'POST'});
                 const imgData = await imgResp.json();
@@ -1353,6 +1395,7 @@ Use Cases: ${useCases}
                 // Step 2: Generate AI content
                 genLog('Step 2: Generating AI content...');
                 progressDetails.innerHTML += '🤖 Generating AI content...<br>';
+                startProgress('Waiting for AI response');
                 
                 const contentResp = await fetch('/api/generate/content', {
                     method: 'POST',
@@ -1377,6 +1420,7 @@ Use Cases: ${useCases}
                 // Step 3: Generate Amazon flatfile
                 genLog('Step 3: Generating Amazon flatfile...');
                 progressDetails.innerHTML += '📄 Generating Amazon flatfile...<br>';
+                startProgress('Preparing flatfile');
                 
                 const flatfileResp = await fetch('/api/generate/amazon-flatfile', {
                     method: 'POST',
