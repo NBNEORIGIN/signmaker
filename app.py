@@ -1448,11 +1448,50 @@ def generate_lifestyle_single(m_number):
         return jsonify({"success": False, "error": "Product not found"}), 404
     
     try:
-        # Generate transparent product image for lifestyle compositing
-        from image_generator import generate_transparent_product_image
-        png_bytes = generate_transparent_product_image(product)
+        # Generate main product image and crop to sign area with transparency
+        from image_generator import generate_product_image, TEMPLATE_SIGN_BOUNDS, SIZES
+        png_bytes = generate_product_image(product, "main")
         product_img = Image.open(io.BytesIO(png_bytes))
+        
+        # Get sign bounds for cropping
+        size = product.get("size", "saville").lower()
+        bounds = TEMPLATE_SIGN_BOUNDS.get(size, (30, 24, 93, 73))
+        
+        # Template is rendered at 4x scale, so multiply bounds
+        scale = 4
+        # Convert mm bounds to pixels (template viewBox is in mm, rendered at scale)
+        # The template viewBox varies by size, need to calculate pixel positions
+        width, height = product_img.size
+        
+        # Estimate crop based on template proportions
+        # Template has sign roughly centered with padding
+        bx, by, bw, bh = bounds
+        
+        # For a typical template, the viewBox might be ~150x120mm
+        # Calculate proportional crop
+        if size == "dracula":
+            # Circular - crop to square
+            margin = int(width * 0.22)
+            product_img = product_img.crop((margin, margin, width - margin, height - margin))
+        else:
+            # Rectangular signs
+            left = int(width * 0.18)
+            top = int(height * 0.18)
+            right = width - int(width * 0.18)
+            bottom = height - int(height * 0.18)
+            product_img = product_img.crop((left, top, right, bottom))
+        
+        # Convert to RGBA and make light gray background transparent
         product_img = product_img.convert('RGBA')
+        datas = product_img.getdata()
+        new_data = []
+        for item in datas:
+            # Make the template background transparent (light gray ~#f0f0f0)
+            if item[0] > 235 and item[1] > 235 and item[2] > 235:
+                new_data.append((255, 255, 255, 0))
+            else:
+                new_data.append(item)
+        product_img.putdata(new_data)
         
         # Get scene prompt based on description
         sign_text = product.get("description", "") or product.get("text_line_1", "") or "Sign"
@@ -1561,11 +1600,35 @@ Professional product photography style, high quality, 4K resolution."""
         results = {}
         for product in all_products:
             try:
-                # Generate transparent product image
-                from image_generator import generate_transparent_product_image
-                png_bytes = generate_transparent_product_image(product)
+                # Generate main product image and crop to sign area
+                from image_generator import TEMPLATE_SIGN_BOUNDS
+                png_bytes = generate_product_image(product, "main")
                 product_img = Image.open(io.BytesIO(png_bytes))
+                
+                # Crop to sign area
+                size = product.get("size", "saville").lower()
+                width, height = product_img.size
+                
+                if size == "dracula":
+                    margin = int(width * 0.22)
+                    product_img = product_img.crop((margin, margin, width - margin, height - margin))
+                else:
+                    left = int(width * 0.18)
+                    top = int(height * 0.18)
+                    right = width - int(width * 0.18)
+                    bottom = height - int(height * 0.18)
+                    product_img = product_img.crop((left, top, right, bottom))
+                
+                # Make background transparent
                 product_img = product_img.convert('RGBA')
+                datas = product_img.getdata()
+                new_data = []
+                for item in datas:
+                    if item[0] > 235 and item[1] > 235 and item[2] > 235:
+                        new_data.append((255, 255, 255, 0))
+                    else:
+                        new_data.append(item)
+                product_img.putdata(new_data)
                 
                 lifestyle = composite_product_on_background(product_img, background.copy())
                 
