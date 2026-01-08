@@ -674,19 +674,38 @@ HTML_TEMPLATE = '''
             }
         }
         
-        async function updateProductScale(mNumber, iconScale, textScale) {
-            try {
-                const resp = await fetch(`/api/products/${mNumber}/scale`, {
-                    method: 'PATCH',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({icon_scale: iconScale, text_scale: textScale})
-                });
-                if (resp.ok) {
-                    loadQAProducts();
-                }
-            } catch (e) {
-                console.error('Failed to update scale:', e);
+        // Debounce timers for scale updates
+        const scaleTimers = {};
+        
+        function updateProductScale(mNumber, iconScale, textScale) {
+            // Debounce: wait 300ms after last change before updating
+            if (scaleTimers[mNumber]) {
+                clearTimeout(scaleTimers[mNumber]);
             }
+            scaleTimers[mNumber] = setTimeout(async () => {
+                try {
+                    const resp = await fetch(`/api/products/${mNumber}/scale`, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({icon_scale: parseFloat(iconScale), text_scale: parseFloat(textScale)})
+                    });
+                    if (resp.ok) {
+                        // Only refresh the specific product's image, not the entire grid
+                        const img = document.querySelector(`img[src*="/api/preview/${mNumber}"]`);
+                        if (img) {
+                            img.src = `/api/preview/${mNumber}?t=${Date.now()}`;
+                        }
+                        // Update the local products array
+                        const p = products.find(x => x.m_number === mNumber);
+                        if (p) {
+                            p.icon_scale = parseFloat(iconScale);
+                            p.text_scale = parseFloat(textScale);
+                        }
+                    }
+                } catch (e) {
+                    console.error('Failed to update scale:', e);
+                }
+            }, 300);
         }
         
         // Load products on page load

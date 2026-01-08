@@ -1,8 +1,8 @@
 ﻿template,size,orientation,layout_mode,element,x,y,width,height
 main,saville,landscape,A,icon,36.7,26.7,80,80
-main,saville,landscape,B,icon,46.7,25.811,60,60
+main,saville,landscape,B,icon,37,28,80,80
 main,saville,landscape,B,text_1,31.55,92.332,90.299,15.221
-main,saville,landscape,C,icon,51.7,28.824,50,50
+main,saville,landscape,C,icon,42,33,70,70
 main,saville,landscape,C,text_1,29.342,84.075,94.716,24.054
 main,saville,landscape,D,icon,46.7,48.237,60,60
 main,saville,landscape,D,text_1,29.342,24.981,94.716,18.533
@@ -12,9 +12,9 @@ main,saville,landscape,F,icon,76.7,91.7,50,50
 main,saville,landscape,F,text_1,76.7,38.647,94.716,14.117
 main,saville,landscape,F,text_2,76.7,51.979,94.716,14.117
 main,dracula,landscape,A,icon,40,40,60,60
-main,dracula,landscape,B,icon,46.506,33.494,50,50
+main,dracula,landscape,B,icon,37,32,66,66
 main,dracula,landscape,B,text_1,40,84.951,60,16.541
-main,dracula,landscape,C,icon,50,33.494,40,40
+main,dracula,landscape,C,icon,42,37,56,56
 main,dracula,landscape,C,text_1,40,76.623,60,25.909
 main,dracula,landscape,D,icon,45,55.354,50,50
 main,dracula,landscape,D,text_1,40,36.026,60,15.239

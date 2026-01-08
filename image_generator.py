@@ -232,11 +232,12 @@ def _calculate_layout(
     elif layout_mode in ("B", "C"):
         # For layout B/C, the icon contains both graphic and text
         # Use most of the inner area and center it
-        icon_height = inner_h * 0.85 * icon_scale
+        icon_height = inner_h * 0.90 * icon_scale
         icon_width = icon_height
         icon_x = bounds.center_x - icon_width / 2
-        # Center the icon vertically within the inner bounds
-        icon_y = bounds.center_y - icon_height / 2
+        # Center the icon vertically - add offset because SVG content is top-heavy
+        # The SVG viewBox is 0-100 but content is weighted toward top (y=8-95)
+        icon_y = bounds.center_y - icon_height / 2 + (icon_height * 0.08)
         
         # Text elements are part of the SVG icon, so no separate text needed
         # But keep this for cases where text_lines are provided separately
