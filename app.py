@@ -1553,7 +1553,11 @@ Use Cases: ${useCases}
             exportLog('Generating lifestyle background with DALL-E...');
             
             try {
-                const resp = await fetch('/api/export/lifestyle-background', {method: 'POST'});
+                const resp = await fetch('/api/export/lifestyle-background', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({})
+                });
                 const data = await resp.json();
                 
                 if (data.success) {
