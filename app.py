@@ -1739,17 +1739,26 @@ Use Cases: ${useCases}
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ theme, use_cases: useCases })
                 });
-                const data = await resp.json();
                 
-                if (data.success) {
-                    status.textContent = '✓ Amazon flatfile generated!';
-                    status.style.color = 'green';
-                    exportLog(`Amazon flatfile generated: ${data.message}`, 'success');
-                } else {
-                    status.textContent = `Error: ${data.error}`;
-                    status.style.color = 'red';
-                    exportLog(`Amazon error: ${data.error}`, 'error');
+                if (!resp.ok) {
+                    const errorData = await resp.json();
+                    throw new Error(errorData.error || 'Failed to generate flatfile');
                 }
+                
+                // Download the file
+                const blob = await resp.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `amazon_flatfile_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                status.textContent = '✓ Amazon flatfile downloaded!';
+                status.style.color = 'green';
+                exportLog('Amazon flatfile downloaded successfully', 'success');
             } catch (e) {
                 status.textContent = 'Error generating Amazon flatfile';
                 status.style.color = 'red';
