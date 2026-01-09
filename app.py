@@ -3221,8 +3221,9 @@ def generate_amazon_flatfile():
             # Style name format: Color_SizeCode
             style_name = f"{color_display}_{size_code}"
             
-            # Image URLs
-            main_image = f"{R2_PUBLIC_URL}/{m_number} - 001.png"
+            # Image URLs - use URL-encoded format with .jpg extension (matching R2 upload)
+            from urllib.parse import quote
+            main_image = f"{R2_PUBLIC_URL}/{quote(m_number + ' - 001.jpg')}"
             
             row_data = {
                 "feed_product_type": "signage",
@@ -3238,11 +3239,11 @@ def generate_amazon_flatfile():
                 "language_value": "en_GB",
                 "recommended_browse_nodes": "330215031",
                 "main_image_url": main_image,
-                "other_image_url1": f"{R2_PUBLIC_URL}/{m_number} - 002.png",
-                "other_image_url2": f"{R2_PUBLIC_URL}/{m_number} - 003.png",
-                "other_image_url3": f"{R2_PUBLIC_URL}/{m_number} - 004.png",
-                "other_image_url4": f"{R2_PUBLIC_URL}/{m_number} - 005.png",
-                "other_image_url5": f"{R2_PUBLIC_URL}/{m_number} - 006.jpg",
+                "other_image_url1": f"{R2_PUBLIC_URL}/{quote(m_number + ' - 002.jpg')}",
+                "other_image_url2": f"{R2_PUBLIC_URL}/{quote(m_number + ' - 003.jpg')}",
+                "other_image_url3": f"{R2_PUBLIC_URL}/{quote(m_number + ' - 004.jpg')}",
+                "other_image_url4": f"{R2_PUBLIC_URL}/{quote(m_number + ' - 005.jpg')}",
+                "other_image_url5": f"{R2_PUBLIC_URL}/{quote(m_number + ' - 006.jpg')}",
                 "relationship_type": "Variation",
                 "variation_theme": "Size & Colour",
                 "parent_sku": parent_sku,
