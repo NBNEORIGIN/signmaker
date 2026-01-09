@@ -150,7 +150,9 @@ class Product:
     def get(m_number):
         conn = get_db()
         cur = dict_cursor(conn)
-        cur.execute("SELECT * FROM products WHERE m_number = ?", (m_number,))
+        is_postgres = DATABASE_URL.startswith("postgres")
+        placeholder = "%s" if is_postgres else "?"
+        cur.execute(f"SELECT * FROM products WHERE m_number = {placeholder}", (m_number,))
         row = cur.fetchone()
         conn.close()
         return Product._ensure_ean_string(dict(row)) if row else None
@@ -168,12 +170,14 @@ class Product:
     def create(data):
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("""
+        is_postgres = DATABASE_URL.startswith("postgres")
+        placeholder = "%s" if is_postgres else "?"
+        cur.execute(f"""
             INSERT INTO products (m_number, description, size, color, layout_mode, 
                 icon_files, text_line_1, text_line_2, text_line_3, orientation,
                 font, material, mounting_type, ean, qa_status, icon_scale, text_scale,
                 icon_offset_x, icon_offset_y)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
         """, (
             data.get('m_number'), data.get('description'), data.get('size'),
             data.get('color'), data.get('layout_mode', 'A'), data.get('icon_files'),
@@ -191,11 +195,13 @@ class Product:
     def update(m_number, data):
         conn = get_db()
         cur = conn.cursor()
+        is_postgres = DATABASE_URL.startswith("postgres")
+        placeholder = "%s" if is_postgres else "?"
         fields = []
         values = []
         for key, value in data.items():
             if value is not None:
-                fields.append(f"{key} = ?")
+                fields.append(f"{key} = {placeholder}")
                 values.append(value)
         
         if not fields:
@@ -204,7 +210,7 @@ class Product:
             return
         
         values.append(m_number)
-        sql = f"UPDATE products SET {', '.join(fields)}, updated_at = CURRENT_TIMESTAMP WHERE m_number = ?"
+        sql = f"UPDATE products SET {', '.join(fields)}, updated_at = CURRENT_TIMESTAMP WHERE m_number = {placeholder}"
         cur.execute(sql, values)
         conn.commit()
         conn.close()
@@ -213,7 +219,9 @@ class Product:
     def delete(m_number):
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("DELETE FROM products WHERE m_number = ?", (m_number,))
+        is_postgres = DATABASE_URL.startswith("postgres")
+        placeholder = "%s" if is_postgres else "?"
+        cur.execute(f"DELETE FROM products WHERE m_number = {placeholder}", (m_number,))
         conn.commit()
         conn.close()
     
