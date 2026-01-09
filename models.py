@@ -194,11 +194,18 @@ class Product:
         fields = []
         values = []
         for key, value in data.items():
-            if key != 'm_number':
+            if key != 'm_number' and value is not None:
                 fields.append(f"{key} = ?")
                 values.append(value)
+        
+        if not fields:
+            # Nothing to update
+            conn.close()
+            return
+        
         values.append(m_number)
-        cur.execute(f"UPDATE products SET {', '.join(fields)}, updated_at = CURRENT_TIMESTAMP WHERE m_number = ?", values)
+        sql = f"UPDATE products SET {', '.join(fields)}, updated_at = CURRENT_TIMESTAMP WHERE m_number = ?"
+        cur.execute(sql, values)
         conn.commit()
         conn.close()
     
