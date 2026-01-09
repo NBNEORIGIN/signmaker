@@ -447,6 +447,20 @@ HTML_TEMPLATE = '''
                     <span id="lifestyle-status" style="margin-top: 10px; display: block; font-size: 12px;"></span>
                 </div>
                 
+                <!-- Step 2: Upload Images & Create M Number Folders -->
+                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <h3 style="margin: 0 0 10px 0;">☁️ Step 2: Upload Images & Create M Number Folders</h3>
+                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                        Generate all product images, upload to R2 for marketplace URLs, <strong>AND automatically save M Number folders to Google Drive</strong>.<br>
+                        Location: <code>G:\My Drive\001 NBNE\001 M\</code>
+                    </p>
+                    <button class="btn btn-warning" onclick="uploadImagesToR2()" id="btn-upload-r2" style="padding: 10px 20px;">
+                        ☁️ Upload Images & Save to Google Drive
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="openMNumberFolder()" style="margin-left: 10px;">📂 Open M Folder</button>
+                    <br><span id="r2-upload-status" style="margin-top: 10px; display: inline-block; font-size: 12px;"></span>
+                </div>
+                
                 <!-- Amazon Flatfile Preview Table -->
                 <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
                     <h3 style="margin: 0 0 10px 0;">📋 Amazon Flatfile Preview</h3>
@@ -465,20 +479,8 @@ HTML_TEMPLATE = '''
                     </div>
                 </div>
                 
-                <!-- Step 2: Upload Images to R2 -->
-                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                    <h3 style="margin: 0 0 10px 0;">☁️ Step 2: Upload Images to R2</h3>
-                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
-                        Generate and upload all product images to Cloudflare R2. <strong>Required before Etsy/Amazon export.</strong>
-                    </p>
-                    <button class="btn btn-warning" onclick="uploadImagesToR2()" id="btn-upload-r2" style="padding: 10px 20px;">
-                        ☁️ Upload All Images to R2
-                    </button>
-                    <span id="r2-upload-status" style="margin-left: 10px; font-size: 12px;"></span>
-                </div>
-                
                 <!-- Step 3: Export to Marketplaces -->
-                <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <div style="background: #d4edda; padding: 15px; border-radius: 8px;">
                     <h3 style="margin: 0 0 10px 0;">📦 Step 3: Export to Marketplaces</h3>
                     <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
                         Generate flatfiles and publish to marketplaces. Each channel can be exported separately.
@@ -505,17 +507,6 @@ HTML_TEMPLATE = '''
                         <button class="btn btn-outline-primary" onclick="downloadAmazonFlatfile()">📥 Download Amazon Flatfile</button>
                         <button class="btn btn-outline-warning" onclick="downloadEtsyFile()">📥 Download Etsy File</button>
                     </div>
-                </div>
-                
-                <!-- Step 3: M Number Folders (Auto-saved) -->
-                <div style="background: #cce5ff; padding: 15px; border-radius: 8px;">
-                    <h3 style="margin: 0 0 10px 0;">📁 Step 3: M Number Folders ✅ Auto-Saved</h3>
-                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
-                        <strong>M Number folders are automatically saved to Google Drive</strong> when you upload images to R2 (Step 2).<br>
-                        Location: <code>G:\My Drive\001 NBNE\001 M\</code>
-                    </p>
-                    <button class="btn btn-outline-secondary" onclick="openMNumberFolder()">📂 Open M Number Folder</button>
-                    <span id="folders-status" style="margin-left: 15px; font-size: 12px; color: green;">No manual download needed!</span>
                 </div>
                 
                 <!-- Debug Console -->
