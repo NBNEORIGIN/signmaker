@@ -51,6 +51,15 @@ TEMPLATE_SIGN_BOUNDS = {
     "baby_jesus": (25, 25, 240, 140),
 }
 
+# Peel and stick template has different sign positions (sign is smaller, positioned lower-left)
+PEEL_AND_STICK_SIGN_BOUNDS = {
+    "saville": (8, 95, 60, 40),
+    "dick": (8, 95, 70, 45),
+    "barzan": (8, 95, 100, 70),
+    "dracula": (15, 95, 50, 50),
+    "baby_jesus": (8, 120, 130, 85),
+}
+
 FONTS = {
     "arial_bold": ("Arial", "bold"),
     "arial_heavy": ("Arial Black", "normal"),
@@ -136,11 +145,14 @@ def _load_layout_bounds():
             }
 
 
-def _get_sign_bounds(size: str, orientation: str = "landscape") -> SignBounds:
+def _get_sign_bounds(size: str, orientation: str = "landscape", template_type: str = "main") -> SignBounds:
     """Get the drawable bounds for a sign size."""
     width_mm, height_mm, is_circular = SIZES[size]
 
-    if size in TEMPLATE_SIGN_BOUNDS:
+    # Use peel_and_stick specific bounds if available
+    if template_type == "peel_and_stick" and size in PEEL_AND_STICK_SIGN_BOUNDS:
+        sign_x, sign_y, sign_w, sign_h = PEEL_AND_STICK_SIGN_BOUNDS[size]
+    elif size in TEMPLATE_SIGN_BOUNDS:
         sign_x, sign_y, sign_w, sign_h = TEMPLATE_SIGN_BOUNDS[size]
     else:
         margin = 20
@@ -423,7 +435,7 @@ def generate_product_image(product: dict, template_type: str = "main") -> bytes:
     render_transparent = (template_type == "peel_and_stick")
     
     # Get bounds and calculate layout (pass template_type for proper bounds lookup)
-    bounds = _get_sign_bounds(size, orientation)
+    bounds = _get_sign_bounds(size, orientation, template_type)
     layout = _calculate_layout(
         bounds, layout_mode, len(icon_files), text_lines,
         icon_scale, text_scale, size, orientation, template_type
