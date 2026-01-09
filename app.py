@@ -3585,7 +3585,7 @@ def flatfile_preview():
         color_display = COLOR_DISPLAY.get(color, color.title())
         
         title = f"{theme} Sign – {dims[0]}x{dims[1]}cm Brushed Aluminium"
-        main_image = f"{R2_PUBLIC_URL}/{m_number} - 001.png"
+        main_image = f"{R2_PUBLIC_URL}/{m_number}%20-%20001.jpg"
         
         rows.append({
             'item_sku': m_number,
@@ -3595,12 +3595,12 @@ def flatfile_preview():
             'size_name': size_code,
             'external_product_id': str(ean) if ean else '',
             'list_price': f"£{price:.2f}",
-            'main_image_url': f"{R2_PUBLIC_URL}/{m_number} - 001.png",
-            'other_image_url1': f"{R2_PUBLIC_URL}/{m_number} - 002.png",
-            'other_image_url2': f"{R2_PUBLIC_URL}/{m_number} - 003.png",
-            'other_image_url3': f"{R2_PUBLIC_URL}/{m_number} - 004.png",
-            'other_image_url4': f"{R2_PUBLIC_URL}/{m_number} - 005.png",
-            'other_image_url5': f"{R2_PUBLIC_URL}/{m_number} - 006.jpg",
+            'main_image_url': f"{R2_PUBLIC_URL}/{m_number}%20-%20001.jpg",
+            'other_image_url1': f"{R2_PUBLIC_URL}/{m_number}%20-%20002.jpg",
+            'other_image_url2': f"{R2_PUBLIC_URL}/{m_number}%20-%20003.jpg",
+            'other_image_url3': f"{R2_PUBLIC_URL}/{m_number}%20-%20004.jpg",
+            'other_image_url4': f"{R2_PUBLIC_URL}/{m_number}%20-%20005.jpg",
+            'other_image_url5': f"{R2_PUBLIC_URL}/{m_number}%20-%20006.jpg",
             'bullet_point1': default_bullets[0],
             'bullet_point2': default_bullets[1],
             'generic_keywords': 'sign warning notice metal plaque weatherproof'
@@ -3708,11 +3708,11 @@ def download_amazon_flatfile():
             "part_number": m_number, "manufacturer": "North By North East Print and Sign Limited",
             "item_name": f"{theme} Sign – {dims[0]}x{dims[1]}cm Brushed Aluminium",
             "recommended_browse_nodes": "330215031",
-            "main_image_url": f"{R2_PUBLIC_URL}/{m_number} - 001.png",
-            "other_image_url1": f"{R2_PUBLIC_URL}/{m_number} - 002.png",
-            "other_image_url2": f"{R2_PUBLIC_URL}/{m_number} - 003.png",
-            "other_image_url3": f"{R2_PUBLIC_URL}/{m_number} - 004.png",
-            "other_image_url4": f"{R2_PUBLIC_URL}/{m_number} - 005.png",
+            "main_image_url": f"{R2_PUBLIC_URL}/{m_number}%20-%20001.jpg",
+            "other_image_url1": f"{R2_PUBLIC_URL}/{m_number}%20-%20002.jpg",
+            "other_image_url2": f"{R2_PUBLIC_URL}/{m_number}%20-%20003.jpg",
+            "other_image_url3": f"{R2_PUBLIC_URL}/{m_number}%20-%20004.jpg",
+            "other_image_url4": f"{R2_PUBLIC_URL}/{m_number}%20-%20005.jpg",
             "relationship_type": "Variation", "variation_theme": "Size & Colour",
             "parent_sku": parent_sku, "parent_child": "Child", "style_name": f"{color_display}_{size_code}",
             "bullet_point1": default_bullets[0], "bullet_point2": default_bullets[1],
