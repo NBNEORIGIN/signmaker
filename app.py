@@ -507,14 +507,15 @@ HTML_TEMPLATE = '''
                     </div>
                 </div>
                 
-                <!-- Step 3: Download M Number Folders -->
+                <!-- Step 3: M Number Folders (Auto-saved) -->
                 <div style="background: #cce5ff; padding: 15px; border-radius: 8px;">
-                    <h3 style="margin: 0 0 10px 0;">📁 Step 3: Download M Number Folders</h3>
+                    <h3 style="margin: 0 0 10px 0;">📁 Step 3: M Number Folders ✅ Auto-Saved</h3>
                     <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
-                        Generate ZIP file with full directory structure for Google Drive: 001 Design/001 MASTER FILE (SVG), 002 Images (PNG/JPEG).
+                        <strong>M Number folders are automatically saved to Google Drive</strong> when you upload images to R2 (Step 2).<br>
+                        Location: <code>G:\My Drive\003 APPS\019 - AMAZON PUBLISHER REV 2.0\exports\</code>
                     </p>
-                    <button class="btn btn-primary" onclick="downloadMNumberFolders()" id="btn-download-folders">📥 Download M Number Folders (ZIP)</button>
-                    <span id="folders-status" style="margin-left: 15px; font-size: 12px;"></span>
+                    <button class="btn btn-outline-secondary" onclick="window.open('file:///G:/My%20Drive/003%20APPS/019%20-%20AMAZON%20PUBLISHER%20REV%202.0/exports/', '_blank')">📂 Open Exports Folder</button>
+                    <span id="folders-status" style="margin-left: 15px; font-size: 12px; color: green;">No manual download needed!</span>
                 </div>
                 
                 <!-- Debug Console -->
