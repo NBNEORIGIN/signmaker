@@ -649,13 +649,13 @@ HTML_TEMPLATE = '''
             const pastedText = clipboardData.getData('text');
             
             // Check if it's multi-line paste
-            const lines = pastedText.trim().split(/[\r\n]+/);
+            const lines = pastedText.trim().split(/[\\r\\n]+/);
             if (lines.length <= 1) return; // Let default paste handle single values
             
             event.preventDefault();
             
             // Parse pasted data - could be single column or multiple columns
-            const values = lines.map(line => line.split('\t')[0].trim()).filter(v => v);
+            const values = lines.map(line => line.split('\\t')[0].trim()).filter(v => v);
             
             // Apply to products starting from current row
             values.forEach(async (value, i) => {
