@@ -3295,8 +3295,7 @@ def generate_amazon_flatfile():
                 "other_image_url1": f"{R2_PUBLIC_URL}/{m_number}%20-%20002.jpg",
                 "other_image_url2": f"{R2_PUBLIC_URL}/{m_number}%20-%20003.jpg",
                 "other_image_url3": f"{R2_PUBLIC_URL}/{m_number}%20-%20004.jpg",
-                "other_image_url4": f"{R2_PUBLIC_URL}/{m_number}%20-%20005.jpg",
-                "other_image_url5": f"{R2_PUBLIC_URL}/{m_number}%20-%20006.jpg",
+                "other_image_url4": f"{R2_PUBLIC_URL}/{m_number}%20-%20006.jpg",
                 "relationship_type": "Variation",
                 "variation_theme": "Size & Colour",
                 "parent_sku": parent_sku,
@@ -3653,8 +3652,7 @@ def flatfile_preview():
             'other_image_url1': f"{R2_PUBLIC_URL}/{m_number}%20-%20002.jpg",
             'other_image_url2': f"{R2_PUBLIC_URL}/{m_number}%20-%20003.jpg",
             'other_image_url3': f"{R2_PUBLIC_URL}/{m_number}%20-%20004.jpg",
-            'other_image_url4': f"{R2_PUBLIC_URL}/{m_number}%20-%20005.jpg",
-            'other_image_url5': f"{R2_PUBLIC_URL}/{m_number}%20-%20006.jpg",
+            'other_image_url4': f"{R2_PUBLIC_URL}/{m_number}%20-%20006.jpg",
             'bullet_point1': default_bullets[0],
             'bullet_point2': default_bullets[1],
             'generic_keywords': 'sign warning notice metal plaque weatherproof'
@@ -3766,7 +3764,7 @@ def download_amazon_flatfile():
             "other_image_url1": f"{R2_PUBLIC_URL}/{m_number}%20-%20002.jpg",
             "other_image_url2": f"{R2_PUBLIC_URL}/{m_number}%20-%20003.jpg",
             "other_image_url3": f"{R2_PUBLIC_URL}/{m_number}%20-%20004.jpg",
-            "other_image_url4": f"{R2_PUBLIC_URL}/{m_number}%20-%20005.jpg",
+            "other_image_url4": f"{R2_PUBLIC_URL}/{m_number}%20-%20006.jpg",
             "relationship_type": "Variation", "variation_theme": "Size & Colour",
             "parent_sku": parent_sku, "parent_child": "Child", "style_name": f"{color_display}_{size_code}",
             "bullet_point1": default_bullets[0], "bullet_point2": default_bullets[1],
@@ -4249,8 +4247,16 @@ def upload_images_to_r2():
                 else:
                     img = img.convert('RGB')
                 
+                # Resize if larger than Amazon's max (10000x10000) - use 2000px max for faster loading
+                MAX_DIMENSION = 2000
+                if img.width > MAX_DIMENSION or img.height > MAX_DIMENSION:
+                    ratio = min(MAX_DIMENSION / img.width, MAX_DIMENSION / img.height)
+                    new_size = (int(img.width * ratio), int(img.height * ratio))
+                    img = img.resize(new_size, Image.LANCZOS)
+                    logging.info(f"Resized {m_number} {img_type} to {new_size}")
+                
                 jpg_bytes = BytesIO()
-                img.save(jpg_bytes, 'JPEG', quality=90)
+                img.save(jpg_bytes, 'JPEG', quality=85)
                 jpg_bytes.seek(0)
                 
                 # Upload to R2
