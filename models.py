@@ -194,7 +194,7 @@ class Product:
         fields = []
         values = []
         for key, value in data.items():
-            if key != 'm_number' and value is not None:
+            if value is not None:
                 fields.append(f"{key} = ?")
                 values.append(value)
         
