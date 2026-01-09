@@ -53,22 +53,45 @@ def _render_svg_impl(svg_content: str, scale: int, transparent: bool = False, fu
         
         if full_page:
             # For peel_and_stick: get the bounding box of all content and capture that
-            # Use JavaScript to get the actual rendered bounds
+            # Use JavaScript to get the actual rendered bounds including all child elements
             bbox = page.evaluate('''() => {
                 const svg = document.querySelector('svg');
+                // Get bounding box of all rendered content
                 const bbox = svg.getBBox();
-                return {x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height};
+                // Also check for any transforms that might affect positioning
+                let minX = bbox.x, minY = bbox.y;
+                let maxX = bbox.x + bbox.width, maxY = bbox.y + bbox.height;
+                
+                // Iterate through all elements to find true bounds
+                const allElements = svg.querySelectorAll('*');
+                allElements.forEach(el => {
+                    try {
+                        if (el.getBBox) {
+                            const elBox = el.getBBox();
+                            if (elBox.width > 0 && elBox.height > 0) {
+                                minX = Math.min(minX, elBox.x);
+                                minY = Math.min(minY, elBox.y);
+                                maxX = Math.max(maxX, elBox.x + elBox.width);
+                                maxY = Math.max(maxY, elBox.y + elBox.height);
+                            }
+                        }
+                    } catch(e) {}
+                });
+                
+                return {x: minX, y: minY, width: maxX - minX, height: maxY - minY};
             }''')
             
             if bbox and bbox['width'] > 0 and bbox['height'] > 0:
                 # Update viewBox to include all content with padding
-                padding = 5
+                padding = 10
                 new_viewbox = f"{bbox['x'] - padding} {bbox['y'] - padding} {bbox['width'] + padding * 2} {bbox['height'] + padding * 2}"
                 page.evaluate(f'''() => {{
                     const svg = document.querySelector('svg');
                     svg.setAttribute('viewBox', '{new_viewbox}');
-                    svg.style.width = '{bbox['width'] + padding * 2}mm';
-                    svg.style.height = '{bbox['height'] + padding * 2}mm';
+                    svg.style.width = '{bbox['width'] + padding * 2}px';
+                    svg.style.height = '{bbox['height'] + padding * 2}px';
+                    svg.setAttribute('width', '{bbox['width'] + padding * 2}');
+                    svg.setAttribute('height', '{bbox['height'] + padding * 2}');
                 }}''')
                 # Re-locate after modification
                 svg_element = page.locator('svg')
