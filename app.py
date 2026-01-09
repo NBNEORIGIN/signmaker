@@ -117,6 +117,19 @@ HTML_TEMPLATE = '''
         }
         .status-pending { background: #ffc107; color: #000; }
         .status-approved { background: #28a745; color: white; }
+        .cell-input {
+            padding: 4px 6px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            width: auto;
+        }
+        .cell-input:focus {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+        #products-table td { padding: 6px 8px; vertical-align: middle; }
+        #products-table select.cell-input { padding: 4px 2px; }
         .status-rejected { background: #dc3545; color: white; }
         .output-box {
             background: #1e1e1e;
@@ -236,14 +249,19 @@ HTML_TEMPLATE = '''
             
             <div class="card">
                 <h2>Product List</h2>
-                <div style="margin-bottom: 15px;">
+                <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                    💡 Tip: Copy M Numbers or EANs from Google Sheets and paste into the first cell - values will fill down automatically.
+                </p>
+                <div style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
                     <button class="btn btn-primary" onclick="showAddProduct()">+ Add Product</button>
                     <button class="btn btn-secondary" onclick="loadProducts()">↻ Refresh</button>
-                    <button class="btn btn-danger" onclick="clearAllProducts()" style="margin-left: 10px;">🗑️ Clear All</button>
+                    <button class="btn btn-danger" onclick="deleteSelectedRows()">🗑️ Delete Selected</button>
+                    <button class="btn btn-danger" onclick="clearAllProducts()" style="margin-left: auto;">Clear All</button>
                 </div>
                 <table id="products-table">
                     <thead>
                         <tr>
+                            <th style="width: 30px;"><input type="checkbox" onchange="toggleSelectAll(this)" title="Select all"></th>
                             <th style="width: 60px;">Preview</th>
                             <th>M Number</th>
                             <th>Description</th>
@@ -251,7 +269,7 @@ HTML_TEMPLATE = '''
                             <th>Color</th>
                             <th>EAN</th>
                             <th>Status</th>
-                            <th>Actions</th>
+                            <th style="width: 50px;"></th>
                         </tr>
                     </thead>
                     <tbody id="products-tbody"></tbody>
@@ -553,29 +571,128 @@ HTML_TEMPLATE = '''
             renderProductsTable();
         }
         
+        const SIZE_OPTIONS = ['saville', 'dick', 'barzan', 'dracula', 'baby_jesus'];
+        const COLOR_OPTIONS = ['silver', 'gold', 'white'];
+        
         function renderProductsTable() {
             const tbody = document.getElementById('products-tbody');
-            tbody.innerHTML = products.map(p => `
-                <tr>
+            tbody.innerHTML = products.map((p, idx) => `
+                <tr data-m="${p.m_number}">
+                    <td style="text-align: center;">
+                        <input type="checkbox" class="row-select" data-m="${p.m_number}">
+                    </td>
                     <td style="text-align: center;">
                         <img src="/api/preview/${p.m_number}?t=${Date.now()}" 
                              alt="${p.m_number}" 
                              style="width: 50px; height: 50px; object-fit: contain; border-radius: 4px; border: 1px solid #ddd; background: #f8f8f8;"
                              onerror="this.style.display='none'">
                     </td>
-                    <td><strong>${p.m_number}</strong></td>
-                    <td>${p.description || ''}</td>
-                    <td>${p.size || ''}</td>
-                    <td>${p.color || ''}</td>
-                    <td style="font-family: monospace;">${String(p.ean || '')}</td>
+                    <td>
+                        <input type="text" value="${p.m_number}" 
+                               class="cell-input" data-field="m_number" data-m="${p.m_number}"
+                               style="width: 70px; font-weight: bold;"
+                               onchange="updateCell(this)" onpaste="handlePaste(event, 'm_number', ${idx})">
+                    </td>
+                    <td>
+                        <input type="text" value="${p.description || ''}" 
+                               class="cell-input" data-field="description" data-m="${p.m_number}"
+                               style="width: 180px;"
+                               onchange="updateCell(this)">
+                    </td>
+                    <td>
+                        <select class="cell-input" data-field="size" data-m="${p.m_number}" onchange="updateCell(this)">
+                            ${SIZE_OPTIONS.map(s => `<option value="${s}" ${p.size === s ? 'selected' : ''}>${s}</option>`).join('')}
+                        </select>
+                    </td>
+                    <td>
+                        <select class="cell-input" data-field="color" data-m="${p.m_number}" onchange="updateCell(this)">
+                            ${COLOR_OPTIONS.map(c => `<option value="${c}" ${p.color === c ? 'selected' : ''}>${c}</option>`).join('')}
+                        </select>
+                    </td>
+                    <td>
+                        <input type="text" value="${String(p.ean || '')}" 
+                               class="cell-input" data-field="ean" data-m="${p.m_number}"
+                               style="width: 120px; font-family: monospace;"
+                               onchange="updateCell(this)" onpaste="handlePaste(event, 'ean', ${idx})">
+                    </td>
                     <td><span class="status-badge status-${p.qa_status || 'pending'}">${p.qa_status || 'pending'}</span></td>
                     <td>
-                        <button class="btn btn-secondary" onclick="editProduct('${p.m_number}')" style="padding: 5px 10px;">Edit</button>
-                        <button class="btn btn-primary" onclick="downloadProductImages('${p.m_number}')" style="padding: 5px 10px;">📦</button>
-                        <button class="btn btn-danger" onclick="deleteProduct('${p.m_number}')" style="padding: 5px 10px;">Delete</button>
+                        <button class="btn btn-danger" onclick="deleteProduct('${p.m_number}')" style="padding: 5px 10px;" title="Delete">🗑️</button>
                     </td>
                 </tr>
             `).join('');
+        }
+        
+        // Update a single cell
+        async function updateCell(input) {
+            const mNumber = input.dataset.m;
+            const field = input.dataset.field;
+            const value = input.value;
+            
+            try {
+                await fetch(`/api/products/${mNumber}`, {
+                    method: 'PATCH',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({[field]: value})
+                });
+                // Update local data
+                const p = products.find(x => x.m_number === mNumber);
+                if (p) p[field] = value;
+            } catch (e) {
+                console.error('Failed to update:', e);
+            }
+        }
+        
+        // Handle paste from Google Sheets (tab-separated values)
+        function handlePaste(event, field, startIdx) {
+            const clipboardData = event.clipboardData || window.clipboardData;
+            const pastedText = clipboardData.getData('text');
+            
+            // Check if it's multi-line paste
+            const lines = pastedText.trim().split(/[\r\n]+/);
+            if (lines.length <= 1) return; // Let default paste handle single values
+            
+            event.preventDefault();
+            
+            // Parse pasted data - could be single column or multiple columns
+            const values = lines.map(line => line.split('\t')[0].trim()).filter(v => v);
+            
+            // Apply to products starting from current row
+            values.forEach(async (value, i) => {
+                const rowIdx = startIdx + i;
+                if (rowIdx < products.length) {
+                    const p = products[rowIdx];
+                    await fetch(`/api/products/${p.m_number}`, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({[field]: value})
+                    });
+                    p[field] = value;
+                }
+            });
+            
+            // Refresh table after paste
+            setTimeout(() => renderProductsTable(), 500);
+        }
+        
+        // Delete selected rows
+        async function deleteSelectedRows() {
+            const checkboxes = document.querySelectorAll('.row-select:checked');
+            if (checkboxes.length === 0) {
+                alert('No rows selected');
+                return;
+            }
+            if (!confirm(`Delete ${checkboxes.length} selected product(s)?`)) return;
+            
+            for (const cb of checkboxes) {
+                await fetch(`/api/products/${cb.dataset.m}`, {method: 'DELETE'});
+            }
+            loadProducts();
+        }
+        
+        // Select/deselect all rows
+        function toggleSelectAll(checkbox) {
+            document.querySelectorAll('.row-select').forEach(cb => cb.checked = checkbox.checked);
         }
         
         // Debug console logging
