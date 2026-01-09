@@ -456,6 +456,79 @@ def generate_product_image(product: dict, template_type: str = "main") -> bytes:
     return png_bytes
 
 
+def generate_product_image_preview(product: dict) -> bytes:
+    """
+    Generate a low-resolution preview image for thumbnails.
+    Uses scale=1 instead of scale=4 for faster rendering.
+    """
+    size = product.get("size", "saville").lower()
+    color = product.get("color", "silver").lower()
+    orientation = product.get("orientation", "landscape").lower()
+    layout_mode = product.get("layout_mode", "A").upper()
+    icon_files = (product.get("icon_files") or "").split(",")
+    icon_files = [f.strip() for f in icon_files if f.strip()]
+    
+    text_lines = [
+        product.get("text_line_1", ""),
+        product.get("text_line_2", ""),
+        product.get("text_line_3", ""),
+    ]
+    
+    icon_scale = float(product.get("icon_scale", 1.0) or 1.0)
+    text_scale = float(product.get("text_scale", 1.0) or 1.0)
+    icon_offset_x = float(product.get("icon_offset_x", 0.0) or 0.0)
+    icon_offset_y = float(product.get("icon_offset_y", 0.0) or 0.0)
+    font = product.get("font", "arial_heavy")
+    
+    # Build template filename
+    if size == "baby_jesus" and orientation == "portrait":
+        template_name = f"{color}_{size}_portrait_main.svg"
+    else:
+        template_name = f"{color}_{size}_main.svg"
+    
+    template_path = ASSETS_DIR / template_name
+    if not template_path.exists():
+        raise FileNotFoundError(f"Template not found: {template_path}")
+    
+    # Parse template
+    tree = etree.parse(str(template_path))
+    root = tree.getroot()
+    
+    # Get bounds and calculate layout
+    bounds = _get_sign_bounds(size, orientation)
+    layout = _calculate_layout(
+        bounds, layout_mode, len(icon_files), text_lines,
+        icon_scale, text_scale, size, orientation, "main"
+    )
+    
+    # Apply QA position offsets to icon position
+    final_icon_x = layout.icon_x + icon_offset_x
+    final_icon_y = layout.icon_y + icon_offset_y
+    
+    # Inject icons
+    for icon_file in icon_files:
+        icon_type, icon_data = _load_icon(icon_file)
+        if icon_type == "svg":
+            _inject_icon(root, icon_data, final_icon_x, final_icon_y, layout.icon_width, layout.icon_height)
+        elif icon_type == "png":
+            _inject_png_icon(root, icon_data, final_icon_x, final_icon_y, layout.icon_width, layout.icon_height)
+    
+    # Add text elements
+    font_family, font_weight = FONTS.get(font, ("Arial", "bold"))
+    for text_elem in layout.text_elements:
+        _add_text_element(
+            root, text_elem["text"], text_elem["x"], text_elem["y"],
+            text_elem["font_size"], text_elem.get("anchor", "middle"),
+            font_family, font_weight
+        )
+    
+    # Convert to string and render at LOW resolution (scale=1)
+    svg_content = etree.tostring(root, encoding="unicode")
+    png_bytes = render_svg_to_bytes(svg_content, scale=1, transparent=False, full_page=False)
+    
+    return png_bytes
+
+
 def generate_transparent_product_image(product: dict) -> bytes:
     """
     Generate a transparent PNG of the main product image.

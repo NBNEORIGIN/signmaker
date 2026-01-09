@@ -2559,6 +2559,9 @@ def upload_icon():
     })
 
 
+# Simple in-memory cache for preview images
+_preview_cache = {}
+
 @app.route('/api/preview/<m_number>')
 def preview_product(m_number):
     """Generate PNG preview for a product."""
@@ -2566,9 +2569,24 @@ def preview_product(m_number):
     if not product:
         return "Not found", 404
     
+    # Check cache - key includes icon_files and updated_at to invalidate on changes
+    cache_key = f"{m_number}_{product.get('icon_files', '')}_{product.get('updated_at', '')}"
+    if cache_key in _preview_cache:
+        return Response(_preview_cache[cache_key], mimetype='image/png')
+    
     try:
-        from image_generator import generate_product_image
-        png_bytes = generate_product_image(product, "main")
+        from image_generator import generate_product_image_preview
+        # Use low-res preview for thumbnails (scale=1 instead of scale=4)
+        png_bytes = generate_product_image_preview(product)
+        
+        # Cache the result (limit cache size)
+        if len(_preview_cache) > 100:
+            # Remove oldest entries
+            keys_to_remove = list(_preview_cache.keys())[:50]
+            for k in keys_to_remove:
+                del _preview_cache[k]
+        _preview_cache[cache_key] = png_bytes
+        
         return Response(png_bytes, mimetype='image/png')
     except Exception as e:
         # Fallback to placeholder SVG on error
