@@ -2498,8 +2498,16 @@ Use Cases: ${useCases}
         }
         
         // Load products and icons on page load
-        loadProducts();
-        loadIcons();
+        document.addEventListener('DOMContentLoaded', function() {
+            loadProducts();
+            loadIcons();
+        });
+        
+        // Also try immediately in case DOMContentLoaded already fired
+        if (document.readyState !== 'loading') {
+            loadProducts();
+            loadIcons();
+        }
     </script>
 </body>
 </html>
