@@ -227,6 +227,15 @@ class Product:
         conn.close()
 
 
-if __name__ == "__main__":
+def init_all():
+    """Initialize all database tables including users."""
     init_db()
+    # Import here to avoid circular imports
+    from auth import init_users_table, init_admin_user
+    init_users_table()
+    init_admin_user()
+
+
+if __name__ == "__main__":
+    init_all()
     print("Database initialized.")

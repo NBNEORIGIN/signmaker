@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-from flask import Flask, render_template_string, jsonify, request, Response, send_file
+from flask import Flask, render_template_string, jsonify, request, Response, send_file, redirect, url_for
+from flask_login import login_user, logout_user, login_required, current_user
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -13,12 +14,18 @@ load_dotenv()
 from config import SECRET_KEY, SIZES, COLORS, BRAND_NAME
 from models import init_db, Product
 from jobs import submit_job, get_job, get_all_jobs, job_to_dict, start_workers
+from auth import login_manager, User, init_users_table, init_admin_user, admin_required
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
+# Initialize Flask-Login
+login_manager.init_app(app)
+
 # Initialize database on startup
 init_db()
+init_users_table()
+init_admin_user()
 
 # Start background workers
 start_workers()
@@ -42,10 +49,37 @@ HTML_TEMPLATE = '''
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             padding: 20px;
-            text-align: center;
+            position: relative;
         }
+        .header-content { text-align: center; }
         .header h1 { font-size: 2rem; margin-bottom: 5px; }
         .header p { opacity: 0.9; }
+        .user-info {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .user-email {
+            font-size: 0.85rem;
+            opacity: 0.9;
+        }
+        .btn-logout {
+            padding: 6px 14px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+        .btn-logout:hover {
+            background: rgba(255,255,255,0.3);
+        }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
         .tabs {
             display: flex;
@@ -186,8 +220,14 @@ HTML_TEMPLATE = '''
 </head>
 <body>
     <div class="header">
-        <h1>🪧 SignMaker</h1>
-        <p>Signage Product Generator & Publisher</p>
+        <div class="header-content">
+            <h1>🪧 SignMaker</h1>
+            <p>Signage Product Generator & Publisher</p>
+        </div>
+        <div class="user-info">
+            <span class="user-email">{{ current_user.email }}</span>
+            <a href="/logout" class="btn-logout">Logout</a>
+        </div>
     </div>
     
     <div class="container">
@@ -2764,17 +2804,186 @@ Use Cases: ${useCases}
 '''
 
 
+LOGIN_TEMPLATE = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SignMaker - Login</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-card {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .login-card h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #333;
+            font-size: 2rem;
+        }
+        .login-card p {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .btn-login {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .remember-me input {
+            width: auto;
+        }
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+        .alert-error {
+            background: #fee2e2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+        }
+        .alert-info {
+            background: #dbeafe;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h1>🪧 SignMaker</h1>
+        <p>Sign in to continue</p>
+        
+        {% if error %}
+        <div class="alert alert-error">{{ error }}</div>
+        {% endif %}
+        
+        {% if message %}
+        <div class="alert alert-info">{{ message }}</div>
+        {% endif %}
+        
+        <form method="POST" action="/login">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required placeholder="you@example.com">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required placeholder="••••••••">
+            </div>
+            <div class="remember-me">
+                <input type="checkbox" id="remember" name="remember">
+                <label for="remember" style="margin: 0; font-weight: normal;">Remember me</label>
+            </div>
+            <button type="submit" class="btn-login">Sign In</button>
+        </form>
+    </div>
+</body>
+</html>
+'''
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    
+    error = None
+    message = request.args.get('message')
+    
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        remember = request.form.get('remember') == 'on'
+        
+        user = User.get_by_email(email)
+        if user and user.check_password(password):
+            login_user(user, remember=remember)
+            User.update_last_login(user.id)
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('index'))
+        else:
+            error = 'Invalid email or password'
+    
+    return render_template_string(LOGIN_TEMPLATE, error=error, message=message)
+
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login', message='You have been logged out'))
+
+
 @app.route('/')
+@login_required
 def index():
-    return render_template_string(HTML_TEMPLATE)
+    return render_template_string(HTML_TEMPLATE, current_user=current_user)
 
 
 @app.route('/api/products', methods=['GET'])
+@login_required
 def get_products():
     return jsonify(Product.all())
 
 
 @app.route('/api/products', methods=['POST'])
+@login_required
 def create_product():
     data = request.json
     Product.create(data)
@@ -2782,6 +2991,7 @@ def create_product():
 
 
 @app.route('/api/products/<m_number>', methods=['GET'])
+@login_required
 def get_product(m_number):
     product = Product.get(m_number)
     if product:
@@ -2790,6 +3000,7 @@ def get_product(m_number):
 
 
 @app.route('/api/products/<m_number>', methods=['PATCH'])
+@login_required
 def update_product(m_number):
     data = request.json
     print(f"PATCH {m_number}: {data}")  # Debug logging
@@ -2798,12 +3009,14 @@ def update_product(m_number):
 
 
 @app.route('/api/products/<m_number>', methods=['DELETE'])
+@login_required
 def delete_product(m_number):
     Product.delete(m_number)
     return jsonify({"success": True})
 
 
 @app.route('/api/products/clear', methods=['DELETE'])
+@login_required
 def clear_all_products():
     """Delete all products."""
     Product.clear_all()
@@ -2811,6 +3024,7 @@ def clear_all_products():
 
 
 @app.route('/api/chat', methods=['POST'])
+@login_required
 def chat_with_assistant():
     """Chat with AI assistant using OpenAI API."""
     import openai
@@ -2845,6 +3059,7 @@ def chat_with_assistant():
 
 
 @app.route('/api/templates/csv')
+@login_required
 def download_csv_template():
     """Download a CSV template for product data."""
     csv_content = '''m_number,description,size,color,ean,icon_files,orientation
@@ -2860,6 +3075,7 @@ M1003,Example Sign,saville,white,5060000000003,icon.svg,landscape
 
 
 @app.route('/api/templates/svg')
+@login_required
 def download_svg_template():
     """Download a 100mm x 100mm SVG template for product graphics."""
     svg_content = '''<?xml version="1.0" encoding="UTF-8"?>
@@ -2892,6 +3108,7 @@ def download_svg_template():
 
 
 @app.route('/api/icons', methods=['GET'])
+@login_required
 def list_icons():
     """List all available icon files."""
     icons_dir = Path(__file__).parent / "icons"
@@ -2908,6 +3125,7 @@ def list_icons():
 
 
 @app.route('/api/icons/<filename>', methods=['GET'])
+@login_required
 def get_icon(filename):
     """Serve an icon file."""
     icons_dir = Path(__file__).parent / "icons"
@@ -2920,6 +3138,7 @@ def get_icon(filename):
 
 
 @app.route('/api/icons/<filename>', methods=['DELETE'])
+@login_required
 def delete_icon(filename):
     """Delete an icon file."""
     icons_dir = Path(__file__).parent / "icons"
@@ -2936,6 +3155,7 @@ def delete_icon(filename):
 
 
 @app.route('/api/icons/upload', methods=['POST'])
+@login_required
 def upload_icon():
     """Upload an SVG icon file."""
     if 'file' not in request.files:
@@ -2973,6 +3193,7 @@ def upload_icon():
 _preview_cache = {}
 
 @app.route('/api/preview/<m_number>')
+@login_required
 def preview_product(m_number):
     """Generate PNG preview for a product."""
     product = Product.get(m_number)
@@ -3010,6 +3231,7 @@ def preview_product(m_number):
 
 
 @app.route('/api/analyze/products', methods=['POST'])
+@login_required
 def analyze_products():
     """Analyze product images with AI to auto-populate theme and use cases."""
     import os
@@ -3101,6 +3323,7 @@ USE_CASES: [comma-separated list of use cases]"""
 
 
 @app.route('/api/generate/images', methods=['POST'])
+@login_required
 def generate_images():
     """Generate product images for approved products."""
     from image_generator import generate_images_job
@@ -3123,6 +3346,7 @@ def generate_images():
 
 
 @app.route('/api/generate/amazon-flatfile', methods=['POST'])
+@login_required
 def generate_amazon_flatfile():
     """Generate Amazon flatfile XLSX in proper Amazon format."""
     import logging
@@ -3379,6 +3603,7 @@ def generate_amazon_flatfile():
 
 
 @app.route('/api/jobs')
+@login_required
 def list_jobs():
     """List all background jobs."""
     jobs = get_all_jobs()
@@ -3386,6 +3611,7 @@ def list_jobs():
 
 
 @app.route('/api/jobs/<job_id>')
+@login_required
 def get_job_status(job_id):
     """Get status of a specific job."""
     job = get_job(job_id)
@@ -3395,6 +3621,7 @@ def get_job_status(job_id):
 
 
 @app.route('/api/generate/content', methods=['POST'])
+@login_required
 def generate_content():
     """Generate AI content for products using OpenAI GPT-4 with sample images."""
     import os
@@ -3509,6 +3736,7 @@ Remember: These products come in MULTIPLE sizes and shapes as shown in the image
 
 
 @app.route('/api/generate/full', methods=['POST'])
+@login_required
 def generate_full():
     """Run full pipeline."""
     def stream():
@@ -3517,6 +3745,7 @@ def generate_full():
 
 
 @app.route('/api/ebay/publish', methods=['POST'])
+@login_required
 def publish_to_ebay():
     """Publish approved products to eBay via API with auto-promotion."""
     import logging
@@ -3575,6 +3804,7 @@ def publish_to_ebay():
 
 
 @app.route('/api/export/flatfile-preview')
+@login_required
 def flatfile_preview():
     """Return Amazon flatfile data as JSON for preview table."""
     import os
@@ -3689,6 +3919,7 @@ def flatfile_preview():
 
 
 @app.route('/api/export/amazon-flatfile-download', methods=['POST'])
+@login_required
 def download_amazon_flatfile():
     """Generate and download Amazon flatfile XLSX."""
     import os
@@ -3812,6 +4043,7 @@ def download_amazon_flatfile():
 
 
 @app.route('/api/export/etsy-download', methods=['POST'])
+@login_required
 def download_etsy_file():
     """Generate and download Etsy shop uploader XLSX."""
     from io import BytesIO
@@ -3838,6 +4070,7 @@ def download_etsy_file():
 
 @app.route('/api/export/amazon', methods=['POST'])
 @app.route('/api/export/flatfile', methods=['POST'])
+@login_required
 def export_flatfile():
     """Export Amazon flatfile for approved products."""
     from io import BytesIO
@@ -3875,6 +4108,7 @@ def export_flatfile():
 
 
 @app.route('/api/export/ebay', methods=['POST'])
+@login_required
 def export_ebay():
     """Export eBay File Exchange CSV."""
     from export_ebay import generate_ebay_csv
@@ -3894,6 +4128,7 @@ def export_ebay():
 
 
 @app.route('/api/export/etsy', methods=['POST'])
+@login_required
 def export_etsy():
     """Export Etsy Shop Uploader XLSX."""
     import logging
@@ -3930,6 +4165,7 @@ def export_etsy():
 
 
 @app.route('/api/export/lifestyle-background', methods=['POST'])
+@login_required
 def generate_lifestyle_background():
     """Generate a lifestyle background image using DALL-E."""
     import os
@@ -4002,6 +4238,7 @@ Architectural photography style, shallow depth of field, professional quality.""
 
 
 @app.route('/api/export/lifestyle-background/preview')
+@login_required
 def preview_lifestyle_background():
     """Serve the lifestyle background image."""
     file_name = request.args.get('file')
@@ -4016,6 +4253,7 @@ def preview_lifestyle_background():
 
 
 @app.route('/api/export/lifestyle-images', methods=['POST'])
+@login_required
 def generate_lifestyle_images():
     """Generate lifestyle images by overlaying product PNGs on the background and upload to R2."""
     import logging
@@ -4150,6 +4388,7 @@ def generate_lifestyle_images():
 
 
 @app.route('/api/export/lifestyle-preview/<m_number>')
+@login_required
 def preview_lifestyle_image(m_number):
     """Serve a lifestyle image preview."""
     file_path = Path(__file__).parent / f"{m_number}_lifestyle.jpg"
@@ -4161,6 +4400,7 @@ def preview_lifestyle_image(m_number):
 
 
 @app.route('/api/open-folder', methods=['POST'])
+@login_required
 def open_folder():
     """Open a folder in the system file explorer."""
     import subprocess
@@ -4195,6 +4435,7 @@ def open_folder():
 
 
 @app.route('/api/export/m-folders', methods=['POST'])
+@login_required
 def export_m_folders_json():
     """Generate M Number folders ZIP and return JSON with file path."""
     import logging
@@ -4230,6 +4471,7 @@ def export_m_folders_json():
 
 
 @app.route('/api/export/m-folders/download')
+@login_required
 def download_m_folders():
     """Download the generated M folders ZIP file."""
     file_path = request.args.get('file')
@@ -4244,6 +4486,7 @@ def download_m_folders():
 
 
 @app.route('/api/upload-images-to-r2', methods=['POST'])
+@login_required
 def upload_images_to_r2():
     """Generate all product images and upload to R2 for marketplace use."""
     import logging
@@ -4420,7 +4663,8 @@ def upload_images_to_r2():
     })
 
 
-@app.route('/api/export/images/<m_number>', methods=['GET'])
+@app.route('/api/export/images/<m_number>')
+@login_required
 def export_product_images(m_number):
     """Get product image(s). If type param provided, return single PNG. Otherwise return ZIP of all."""
     from io import BytesIO
@@ -4460,6 +4704,7 @@ def export_product_images(m_number):
 
 
 @app.route('/api/export/images', methods=['POST'])
+@login_required
 def export_all_images():
     """Download all product images as ZIP (approved products)."""
     from export_images import generate_images_zip
@@ -4483,6 +4728,7 @@ def export_all_images():
 
 
 @app.route('/api/export/m-number-folders/<m_number>', methods=['GET'])
+@login_required
 def export_m_number_folder(m_number):
     """Download M Number folder with full structure for staff (single product)."""
     from export_images import generate_single_m_number_folder_zip
@@ -4503,6 +4749,7 @@ def export_m_number_folder(m_number):
 
 
 @app.route('/api/export/m-number-folders', methods=['POST'])
+@login_required
 def export_all_m_number_folders():
     """Download all M Number folders with full structure for staff."""
     from export_images import generate_m_number_folder_zip
@@ -4526,6 +4773,7 @@ def export_all_m_number_folders():
 
 
 @app.route('/api/products/<m_number>/scale', methods=['PATCH'])
+@login_required
 def update_product_scale(m_number):
     """Update icon_scale and text_scale for a product (QA tuning)."""
     data = request.json
@@ -4547,6 +4795,7 @@ def update_product_scale(m_number):
 
 
 @app.route('/api/products/<m_number>/position', methods=['PATCH'])
+@login_required
 def update_product_position(m_number):
     """Update icon_offset_x and icon_offset_y for a product (QA positioning)."""
     data = request.json
