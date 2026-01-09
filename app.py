@@ -4138,6 +4138,7 @@ def download_m_folders():
 def upload_images_to_r2():
     """Generate all product images and upload to R2 for marketplace use."""
     import logging
+    import os
     from io import BytesIO
     from PIL import Image
     from image_generator import generate_product_image
@@ -4145,14 +4146,23 @@ def upload_images_to_r2():
     # Disable PIL decompression bomb check for large images
     Image.MAX_IMAGE_PIXELS = None
     
+    # Check R2 credentials
+    from config import R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_PUBLIC_URL
+    if not R2_ACCOUNT_ID or not R2_ACCESS_KEY_ID or not R2_SECRET_ACCESS_KEY:
+        return jsonify({"success": False, "error": "R2 credentials not configured. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY environment variables."}), 500
+    
+    logging.info(f"R2 Config: account={R2_ACCOUNT_ID[:8]}..., public_url={R2_PUBLIC_URL}")
+    
     try:
         from r2_storage import upload_image as upload_to_r2
-    except ImportError:
-        return jsonify({"success": False, "error": "R2 storage not configured"}), 500
+    except ImportError as e:
+        return jsonify({"success": False, "error": f"R2 storage import failed: {e}"}), 500
     
     products = Product.all()
     if not products:
         return jsonify({"success": False, "error": "No products found"}), 400
+    
+    logging.info(f"Starting R2 upload for {len(products)} products")
     
     # Image types: 001=main, 002=dimensions, 003=peel_and_stick, 004=rear
     IMAGE_TYPES = [
@@ -4198,18 +4208,21 @@ def upload_images_to_r2():
                 logging.info(f"Uploaded {r2_key}")
                 
             except Exception as e:
+                import traceback
                 error_msg = f"{m_number} {img_type}: {str(e)}"
                 errors.append(error_msg)
-                logging.error(error_msg)
+                logging.error(f"{error_msg}\n{traceback.format_exc()}")
         
         results.append(product_results)
     
+    logging.info(f"R2 upload complete: {total_uploaded} uploaded, {len(errors)} errors")
+    
     return jsonify({
-        "success": True,
+        "success": True if total_uploaded > 0 else False,
         "total_uploaded": total_uploaded,
         "products": len(products),
-        "errors": errors[:10] if errors else [],
-        "message": f"Uploaded {total_uploaded} images for {len(products)} products"
+        "errors": errors[:20] if errors else [],
+        "message": f"Uploaded {total_uploaded} images for {len(products)} products" + (f" ({len(errors)} errors)" if errors else "")
     })
 
 
