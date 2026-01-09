@@ -788,9 +788,17 @@ HTML_TEMPLATE = '''
         }
         
         async function loadProducts() {
-            const resp = await fetch('/api/products');
-            products = await resp.json();
-            renderProductsTable();
+            try {
+                const resp = await fetch('/api/products');
+                if (!resp.ok) {
+                    console.error('Failed to load products:', resp.status);
+                    return;
+                }
+                products = await resp.json();
+                renderProductsTable();
+            } catch (e) {
+                console.error('Error loading products:', e);
+            }
         }
         
         const SIZE_OPTIONS = ['saville', 'dick', 'barzan', 'dracula', 'baby_jesus'];
