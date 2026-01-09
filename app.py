@@ -597,6 +597,46 @@ HTML_TEMPLATE = '''
         let products = [];
         let chatHistory = [];
         
+        // Chat memory storage - persists per category
+        const CHAT_STORAGE_KEY = 'signmaker_chat_history';
+        
+        function loadChatMemory(category) {
+            try {
+                const stored = localStorage.getItem(CHAT_STORAGE_KEY);
+                if (stored) {
+                    const allChats = JSON.parse(stored);
+                    return allChats[category] || [];
+                }
+            } catch (e) {
+                console.error('Failed to load chat memory:', e);
+            }
+            return [];
+        }
+        
+        function saveChatMemory(category, history) {
+            try {
+                const stored = localStorage.getItem(CHAT_STORAGE_KEY);
+                const allChats = stored ? JSON.parse(stored) : {};
+                allChats[category] = history;
+                localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(allChats));
+            } catch (e) {
+                console.error('Failed to save chat memory:', e);
+            }
+        }
+        
+        function clearChatMemory(category) {
+            try {
+                const stored = localStorage.getItem(CHAT_STORAGE_KEY);
+                if (stored) {
+                    const allChats = JSON.parse(stored);
+                    delete allChats[category];
+                    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(allChats));
+                }
+            } catch (e) {
+                console.error('Failed to clear chat memory:', e);
+            }
+        }
+        
         // Category system prompts
         const CATEGORY_PROMPTS = {
             'boundary': `You are acting as a product development assistant for North By North East Print & Sign Ltd. Your role is STRICTLY limited to the category: PRIVATE BOUNDARY & EXCLUSION SIGNAGE. This includes signs that assert ownership, restrict access, or deter unauthorised entry on private property, such as: No Entry, Keep Out, Private Property, No Unauthorised Access, No Public Access, Staff Only / Customers Only (non-facilities use). You MUST NOT suggest or create products in the following categories: Commercial intrusion (e.g. cold callers, flyers, junk mail), Vehicle or movement control (e.g. No Through Road, No Turning), Parking management, Pets & animals, Courtesy or polite instructional signage, Safety or compliance signage. Before suggesting a new product, you must: 1. State which boundary or exclusion problem it solves 2. Confirm it does not overlap with existing exclusion products 3. Explain briefly why the buyer is emotionally motivated to purchase. Focus on: Ownership and territorial control, Assertive minimal language, Small-format aluminium sign suitability, Variants that clarify meaning without duplicating intent. If a proposed idea overlaps another category, you must stop and redirect instead of proceeding.`,
@@ -614,14 +654,31 @@ HTML_TEMPLATE = '''
         
         function switchCategory() {
             const category = document.getElementById('user-category').value;
-            clearChat();
+            // Load saved chat history for this category
+            chatHistory = loadChatMemory(category);
+            
+            const messagesDiv = document.getElementById('chat-messages');
             const welcomeMsg = `Welcome! I'm your product development assistant for <strong>${CATEGORY_NAMES[category]}</strong>. How can I help you today?`;
-            document.getElementById('chat-messages').innerHTML = `<div class="chat-msg assistant">${welcomeMsg}</div>`;
+            
+            if (chatHistory.length === 0) {
+                // No history - show welcome message
+                messagesDiv.innerHTML = `<div class="chat-msg assistant">${welcomeMsg}</div>`;
+            } else {
+                // Restore previous conversation
+                messagesDiv.innerHTML = `<div class="chat-msg assistant">${welcomeMsg}</div>`;
+                chatHistory.forEach(msg => {
+                    const cssClass = msg.role === 'user' ? 'user' : 'assistant';
+                    const content = msg.role === 'assistant' ? msg.content.replace(/\\n/g, '<br>') : msg.content;
+                    messagesDiv.innerHTML += `<div class="chat-msg ${cssClass}">${content}</div>`;
+                });
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
         }
         
         function clearChat() {
-            chatHistory = [];
             const category = document.getElementById('user-category').value;
+            chatHistory = [];
+            clearChatMemory(category);
             const welcomeMsg = `Welcome! I'm your product development assistant for <strong>${CATEGORY_NAMES[category]}</strong>. How can I help you today?`;
             document.getElementById('chat-messages').innerHTML = `<div class="chat-msg assistant">${welcomeMsg}</div>`;
         }
@@ -665,6 +722,8 @@ HTML_TEMPLATE = '''
                 } else {
                     chatHistory.push({role: 'assistant', content: data.response});
                     messagesDiv.innerHTML += `<div class="chat-msg assistant">${data.response.replace(/\\n/g, '<br>')}</div>`;
+                    // Save chat history to localStorage
+                    saveChatMemory(category, chatHistory);
                 }
             } catch (e) {
                 document.getElementById('typing')?.remove();
@@ -2666,12 +2725,15 @@ Use Cases: ${useCases}
         document.addEventListener('DOMContentLoaded', function() {
             loadProducts();
             loadIcons();
+            // Load chat history for default category
+            switchCategory();
         });
         
         // Also try immediately in case DOMContentLoaded already fired
         if (document.readyState !== 'loading') {
             loadProducts();
             loadIcons();
+            switchCategory();
         }
     </script>
 </body>
