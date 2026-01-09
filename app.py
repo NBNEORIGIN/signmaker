@@ -3245,7 +3245,7 @@ def analyze_products():
     import os
     import base64
     import logging
-    from image_generator import generate_product_image
+    from image_generator import generate_product_image_preview
     
     data = request.json or {}
     sample_m_numbers = data.get('sample_m_numbers', [])
@@ -3259,22 +3259,24 @@ def analyze_products():
     
     try:
         from openai import OpenAI
-        client = OpenAI(api_key=api_key)
+        client = OpenAI(api_key=api_key, timeout=90.0)
         
         # Build message content with images
         content = []
         
-        # Add sample images
-        for m_number in sample_m_numbers[:5]:
+        # Add sample images (use preview for speed, limit to 3)
+        for m_number in sample_m_numbers[:3]:
             product = Product.get(m_number)
             if product:
                 try:
-                    png_bytes = generate_product_image(product, "main")
+                    # Use preview (faster, lower res) instead of full image
+                    png_bytes = generate_product_image_preview(product)
                     img_base64 = base64.b64encode(png_bytes).decode()
                     content.append({
                         "type": "image_url",
                         "image_url": {
-                            "url": f"data:image/png;base64,{img_base64}"
+                            "url": f"data:image/png;base64,{img_base64}",
+                            "detail": "low"
                         }
                     })
                 except Exception as e:
