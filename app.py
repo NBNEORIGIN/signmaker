@@ -465,9 +465,21 @@ HTML_TEMPLATE = '''
                     </div>
                 </div>
                 
-                <!-- Step 2: Export to Marketplaces -->
+                <!-- Step 2: Upload Images to R2 -->
+                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <h3 style="margin: 0 0 10px 0;">☁️ Step 2: Upload Images to R2</h3>
+                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                        Generate and upload all product images to Cloudflare R2. <strong>Required before Etsy/Amazon export.</strong>
+                    </p>
+                    <button class="btn btn-warning" onclick="uploadImagesToR2()" id="btn-upload-r2" style="padding: 10px 20px;">
+                        ☁️ Upload All Images to R2
+                    </button>
+                    <span id="r2-upload-status" style="margin-left: 10px; font-size: 12px;"></span>
+                </div>
+                
+                <!-- Step 3: Export to Marketplaces -->
                 <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                    <h3 style="margin: 0 0 10px 0;">📦 Step 2: Export to Marketplaces</h3>
+                    <h3 style="margin: 0 0 10px 0;">📦 Step 3: Export to Marketplaces</h3>
                     <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
                         Generate flatfiles and publish to marketplaces. Each channel can be exported separately.
                     </p>
@@ -1240,6 +1252,35 @@ HTML_TEMPLATE = '''
             } catch (e) {
                 alert('Error deleting icon: ' + e.message);
             }
+        }
+        
+        async function uploadImagesToR2() {
+            const btn = document.getElementById('btn-upload-r2');
+            const status = document.getElementById('r2-upload-status');
+            
+            btn.disabled = true;
+            btn.textContent = '⏳ Uploading...';
+            status.innerHTML = '<span style="color: #666;">Generating and uploading images to R2. This may take several minutes...</span>';
+            
+            try {
+                const resp = await fetch('/api/upload-images-to-r2', {method: 'POST'});
+                const data = await resp.json();
+                
+                if (data.success) {
+                    status.innerHTML = `<span style="color: green;">✅ ${data.message}</span>`;
+                    if (data.errors && data.errors.length > 0) {
+                        status.innerHTML += `<br><span style="color: orange;">⚠️ ${data.errors.length} errors (see console)</span>`;
+                        console.log('Upload errors:', data.errors);
+                    }
+                } else {
+                    status.innerHTML = `<span style="color: red;">❌ Error: ${data.error}</span>`;
+                }
+            } catch (e) {
+                status.innerHTML = `<span style="color: red;">❌ Error: ${e.message}</span>`;
+            }
+            
+            btn.disabled = false;
+            btn.textContent = '☁️ Upload All Images to R2';
         }
         
         async function generateImages() {
@@ -4091,6 +4132,82 @@ def download_m_folders():
         return "File not found", 404
     
     return send_file(path, mimetype='application/zip', as_attachment=True, download_name=path.name)
+
+
+@app.route('/api/upload-images-to-r2', methods=['POST'])
+def upload_images_to_r2():
+    """Generate all product images and upload to R2 for marketplace use."""
+    import logging
+    from io import BytesIO
+    from PIL import Image
+    from image_generator import generate_product_image
+    
+    try:
+        from r2_storage import upload_image as upload_to_r2
+    except ImportError:
+        return jsonify({"success": False, "error": "R2 storage not configured"}), 500
+    
+    products = Product.all()
+    if not products:
+        return jsonify({"success": False, "error": "No products found"}), 400
+    
+    # Image types: 001=main, 002=dimensions, 003=peel_and_stick, 004=rear
+    IMAGE_TYPES = [
+        ('main', '001'),
+        ('dimensions', '002'),
+        ('peel_and_stick', '003'),
+        ('rear', '004'),
+    ]
+    
+    results = []
+    total_uploaded = 0
+    errors = []
+    
+    for product in products:
+        m_number = product['m_number']
+        product_results = {'m_number': m_number, 'images': []}
+        
+        for img_type, img_num in IMAGE_TYPES:
+            try:
+                # Generate PNG image
+                png_bytes = generate_product_image(product, img_type)
+                
+                # Convert to JPEG for smaller file size
+                img = Image.open(BytesIO(png_bytes))
+                if img.mode == 'RGBA':
+                    # Add white background for transparency
+                    bg = Image.new('RGB', img.size, (255, 255, 255))
+                    bg.paste(img, mask=img.split()[3])
+                    img = bg
+                else:
+                    img = img.convert('RGB')
+                
+                jpg_bytes = BytesIO()
+                img.save(jpg_bytes, 'JPEG', quality=90)
+                jpg_bytes.seek(0)
+                
+                # Upload to R2
+                r2_key = f"{m_number} - {img_num}.jpg"
+                upload_to_r2(jpg_bytes.getvalue(), r2_key, content_type='image/jpeg')
+                
+                product_results['images'].append(r2_key)
+                total_uploaded += 1
+                logging.info(f"Uploaded {r2_key}")
+                
+            except Exception as e:
+                error_msg = f"{m_number} {img_type}: {str(e)}"
+                errors.append(error_msg)
+                logging.error(error_msg)
+        
+        results.append(product_results)
+    
+    return jsonify({
+        "success": True,
+        "total_uploaded": total_uploaded,
+        "products": len(products),
+        "errors": errors[:10] if errors else [],
+        "message": f"Uploaded {total_uploaded} images for {len(products)} products"
+    })
 
 
 @app.route('/api/export/images/<m_number>', methods=['GET'])
