@@ -644,6 +644,7 @@ HTML_TEMPLATE = '''
         }
         
         // Handle paste from Google Sheets (tab-separated values)
+        // Supports multi-column paste: M Number, Description, EAN
         function handlePaste(event, field, startIdx) {
             const clipboardData = event.clipboardData || window.clipboardData;
             const pastedText = clipboardData.getData('text');
@@ -654,25 +655,45 @@ HTML_TEMPLATE = '''
             
             event.preventDefault();
             
-            // Parse pasted data - could be single column or multiple columns
-            const values = lines.map(line => line.split('\\t')[0].trim()).filter(v => v);
+            // Parse pasted data - detect if multiple columns
+            const rows = lines.map(line => line.split('\\t'));
+            const numCols = rows[0] ? rows[0].length : 1;
+            
+            // Define column mapping based on which field was clicked
+            // If pasting into m_number with 3 columns, assume: m_number, description, ean
+            // If pasting into ean with 1 column, just paste eans
+            let fieldMap = [field]; // Default: single column
+            if (numCols >= 3 && field === 'm_number') {
+                fieldMap = ['m_number', 'description', 'ean'];
+            } else if (numCols >= 2 && field === 'm_number') {
+                fieldMap = ['m_number', 'description'];
+            } else if (numCols >= 2 && field === 'description') {
+                fieldMap = ['description', 'ean'];
+            }
             
             // Apply to products starting from current row
-            values.forEach(async (value, i) => {
+            const updates = [];
+            rows.forEach((cols, i) => {
                 const rowIdx = startIdx + i;
                 if (rowIdx < products.length) {
                     const p = products[rowIdx];
-                    await fetch(`/api/products/${p.m_number}`, {
+                    const updateData = {};
+                    fieldMap.forEach((f, colIdx) => {
+                        if (cols[colIdx] !== undefined) {
+                            updateData[f] = cols[colIdx].trim();
+                            p[f] = cols[colIdx].trim();
+                        }
+                    });
+                    updates.push(fetch(`/api/products/${p.m_number}`, {
                         method: 'PATCH',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({[field]: value})
-                    });
-                    p[field] = value;
+                        body: JSON.stringify(updateData)
+                    }));
                 }
             });
             
-            // Refresh table after paste
-            setTimeout(() => renderProductsTable(), 500);
+            // Wait for all updates then refresh
+            Promise.all(updates).then(() => renderProductsTable());
         }
         
         // Delete selected rows
