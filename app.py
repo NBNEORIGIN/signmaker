@@ -4142,6 +4142,9 @@ def upload_images_to_r2():
     from PIL import Image
     from image_generator import generate_product_image
     
+    # Disable PIL decompression bomb check for large images
+    Image.MAX_IMAGE_PIXELS = None
+    
     try:
         from r2_storage import upload_image as upload_to_r2
     except ImportError:

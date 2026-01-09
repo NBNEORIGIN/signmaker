@@ -14,6 +14,9 @@ from typing import Optional
 from lxml import etree
 from PIL import Image
 
+# Disable PIL decompression bomb check for large product images
+Image.MAX_IMAGE_PIXELS = None
+
 from svg_renderer import render_svg_to_bytes
 from r2_storage import upload_png_and_jpeg
 from jobs import Job
