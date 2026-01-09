@@ -227,9 +227,10 @@ HTML_TEMPLATE = '''
                 <div id="import-status" style="margin-top: 10px; font-size: 12px;"></div>
                 
                 <!-- SVG Preview Area -->
-                <div id="svg-preview-area" style="display: none; margin-top: 15px; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 15px;">
-                    <h4 style="margin: 0 0 10px 0;">🖼️ Imported Graphics Preview</h4>
+                <div id="svg-preview-area" style="margin-top: 15px; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 15px;">
+                    <h4 style="margin: 0 0 10px 0;">🖼️ Available Icons</h4>
                     <div id="svg-previews" style="display: flex; gap: 10px; flex-wrap: wrap;"></div>
+                    <p id="no-icons-msg" style="color: #999; font-size: 12px;">No icons uploaded yet. Drag & drop SVG files above.</p>
                 </div>
             </div>
             
@@ -905,22 +906,90 @@ HTML_TEMPLATE = '''
                         loadProducts(); // Refresh to show updated previews
                     }
                     
-                    // Show preview
-                    previewArea.style.display = 'block';
-                    const previewDiv = document.createElement('div');
-                    previewDiv.style.cssText = 'border: 1px solid #ddd; border-radius: 4px; padding: 10px; text-align: center; background: white;';
-                    previewDiv.innerHTML = `
-                        <div style="width: 80px; height: 80px; margin: 0 auto; overflow: hidden;">
-                            ${svgContent}
-                        </div>
-                        <p style="font-size: 11px; margin: 5px 0 0 0; color: #666;">${data.filename}</p>
-                    `;
-                    previews.appendChild(previewDiv);
+                    // Refresh icons list
+                    loadIcons();
                 } else {
                     status.innerHTML += `<span style="color: red;">❌ Error: ${data.error}</span><br>`;
                 }
             } catch (e) {
                 status.innerHTML += `<span style="color: red;">❌ Error importing ${file.name}: ${e.message}</span><br>`;
+            }
+        }
+        
+        // Load and display available icons
+        async function loadIcons() {
+            const previews = document.getElementById('svg-previews');
+            const noIconsMsg = document.getElementById('no-icons-msg');
+            
+            try {
+                const resp = await fetch('/api/icons');
+                const icons = await resp.json();
+                
+                if (icons.length === 0) {
+                    previews.innerHTML = '';
+                    noIconsMsg.style.display = 'block';
+                    return;
+                }
+                
+                noIconsMsg.style.display = 'none';
+                previews.innerHTML = icons.map(icon => `
+                    <div style="border: 1px solid #ddd; border-radius: 4px; padding: 10px; text-align: center; background: white; position: relative;">
+                        <button onclick="deleteIcon('${icon.filename}')" 
+                                style="position: absolute; top: 2px; right: 2px; background: #dc3545; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; cursor: pointer; line-height: 1;"
+                                title="Delete icon">×</button>
+                        <img src="/api/icons/${icon.filename}" 
+                             style="width: 80px; height: 80px; object-fit: contain;"
+                             onerror="this.parentElement.style.display='none'">
+                        <p style="font-size: 10px; margin: 5px 0 0 0; color: #666; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${icon.filename}</p>
+                        <button onclick="applyIconToProducts('${icon.filename}')" 
+                                class="btn btn-primary" 
+                                style="margin-top: 5px; padding: 3px 8px; font-size: 10px;">
+                            Apply to All
+                        </button>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Failed to load icons:', e);
+            }
+        }
+        
+        // Apply an icon to all products
+        async function applyIconToProducts(filename) {
+            const status = document.getElementById('import-status');
+            status.innerHTML = `<span style="color: #0ff;">Applying ${filename} to all products...</span>`;
+            
+            try {
+                let appliedCount = 0;
+                for (const product of products) {
+                    await fetch(`/api/products/${product.m_number}`, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({icon_files: filename})
+                    });
+                    appliedCount++;
+                }
+                status.innerHTML = `<span style="color: #0f0;">✅ Applied ${filename} to ${appliedCount} products</span>`;
+                loadProducts(); // Refresh previews
+            } catch (e) {
+                status.innerHTML = `<span style="color: red;">❌ Error: ${e.message}</span>`;
+            }
+        }
+        
+        // Delete an icon
+        async function deleteIcon(filename) {
+            if (!confirm(`Delete icon "${filename}"?`)) return;
+            
+            try {
+                const resp = await fetch(`/api/icons/${filename}`, {method: 'DELETE'});
+                const data = await resp.json();
+                
+                if (data.success) {
+                    loadIcons(); // Refresh list
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                alert('Error deleting icon: ' + e.message);
             }
         }
         
@@ -2311,8 +2380,9 @@ Use Cases: ${useCases}
             }
         }
         
-        // Load products on page load
+        // Load products and icons on page load
         loadProducts();
+        loadIcons();
     </script>
 </body>
 </html>
@@ -2409,6 +2479,50 @@ def download_svg_template():
         mimetype='image/svg+xml',
         headers={'Content-Disposition': 'attachment; filename=icon_template_100mm.svg'}
     )
+
+
+@app.route('/api/icons', methods=['GET'])
+def list_icons():
+    """List all available icon files."""
+    icons_dir = Path(__file__).parent / "icons"
+    if not icons_dir.exists():
+        return jsonify([])
+    
+    icons = []
+    for f in icons_dir.glob('*.svg'):
+        icons.append({
+            "filename": f.name,
+            "path": str(f)
+        })
+    return jsonify(icons)
+
+
+@app.route('/api/icons/<filename>', methods=['GET'])
+def get_icon(filename):
+    """Serve an icon file."""
+    icons_dir = Path(__file__).parent / "icons"
+    icon_path = icons_dir / filename
+    
+    if not icon_path.exists():
+        return "Not found", 404
+    
+    return send_file(icon_path, mimetype='image/svg+xml')
+
+
+@app.route('/api/icons/<filename>', methods=['DELETE'])
+def delete_icon(filename):
+    """Delete an icon file."""
+    icons_dir = Path(__file__).parent / "icons"
+    icon_path = icons_dir / filename
+    
+    if not icon_path.exists():
+        return jsonify({"success": False, "error": "Icon not found"}), 404
+    
+    try:
+        icon_path.unlink()
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/icons/upload', methods=['POST'])
