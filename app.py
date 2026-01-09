@@ -178,6 +178,10 @@ HTML_TEMPLATE = '''
         .alert-info { background: #e7f3ff; color: #0066cc; }
         .alert-success { background: #d4edda; color: #155724; }
         .alert-error { background: #f8d7da; color: #721c24; }
+        .chat-msg { padding: 8px 12px; margin-bottom: 8px; border-radius: 8px; max-width: 85%; }
+        .chat-msg.user { background: #667eea; color: white; margin-left: auto; }
+        .chat-msg.assistant { background: #e9ecef; color: #333; }
+        .chat-msg.error { background: #f8d7da; color: #721c24; }
     </style>
 </head>
 <body>
@@ -187,6 +191,31 @@ HTML_TEMPLATE = '''
     </div>
     
     <div class="container">
+        <!-- AI Assistant Chat -->
+        <div class="card" style="margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h2 style="margin: 0;">💬 AI Product Assistant</h2>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <label style="font-size: 13px; color: #666;">Category:</label>
+                    <select id="user-category" onchange="switchCategory()" style="width: auto; padding: 6px 10px;">
+                        <option value="boundary">Private Boundary & Exclusion</option>
+                        <option value="user2">Category 2 (TBD)</option>
+                        <option value="user3">Category 3 (TBD)</option>
+                        <option value="user4">Category 4 (TBD)</option>
+                    </select>
+                    <button class="btn btn-secondary" onclick="clearChat()" style="padding: 6px 12px;">Clear</button>
+                </div>
+            </div>
+            <div id="chat-messages" style="height: 200px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: #fafafa; margin-bottom: 10px;">
+                <div class="chat-msg assistant">Welcome! I'm your product development assistant for <strong>Private Boundary & Exclusion Signage</strong>. How can I help you today?</div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="chat-input" placeholder="Ask about product ideas, descriptions, or design guidance..." 
+                       style="flex: 1;" onkeypress="if(event.key==='Enter')sendChat()">
+                <button class="btn btn-primary" onclick="sendChat()">Send</button>
+            </div>
+        </div>
+        
         <div class="tabs">
             <button class="tab active" onclick="showTab('products')">📦 Products</button>
             <button class="tab" onclick="showTab('qa')">✅ QA Review</button>
@@ -554,6 +583,84 @@ HTML_TEMPLATE = '''
     
     <script>
         let products = [];
+        let chatHistory = [];
+        
+        // Category system prompts
+        const CATEGORY_PROMPTS = {
+            'boundary': `You are acting as a product development assistant for North By North East Print & Sign Ltd. Your role is STRICTLY limited to the category: PRIVATE BOUNDARY & EXCLUSION SIGNAGE. This includes signs that assert ownership, restrict access, or deter unauthorised entry on private property, such as: No Entry, Keep Out, Private Property, No Unauthorised Access, No Public Access, Staff Only / Customers Only (non-facilities use). You MUST NOT suggest or create products in the following categories: Commercial intrusion (e.g. cold callers, flyers, junk mail), Vehicle or movement control (e.g. No Through Road, No Turning), Parking management, Pets & animals, Courtesy or polite instructional signage, Safety or compliance signage. Before suggesting a new product, you must: 1. State which boundary or exclusion problem it solves 2. Confirm it does not overlap with existing exclusion products 3. Explain briefly why the buyer is emotionally motivated to purchase. Focus on: Ownership and territorial control, Assertive minimal language, Small-format aluminium sign suitability, Variants that clarify meaning without duplicating intent. If a proposed idea overlaps another category, you must stop and redirect instead of proceeding.`,
+            'user2': 'You are a product development assistant. Category 2 prompt to be configured.',
+            'user3': 'You are a product development assistant. Category 3 prompt to be configured.',
+            'user4': 'You are a product development assistant. Category 4 prompt to be configured.'
+        };
+        
+        const CATEGORY_NAMES = {
+            'boundary': 'Private Boundary & Exclusion Signage',
+            'user2': 'Category 2',
+            'user3': 'Category 3',
+            'user4': 'Category 4'
+        };
+        
+        function switchCategory() {
+            const category = document.getElementById('user-category').value;
+            clearChat();
+            const welcomeMsg = `Welcome! I'm your product development assistant for <strong>${CATEGORY_NAMES[category]}</strong>. How can I help you today?`;
+            document.getElementById('chat-messages').innerHTML = `<div class="chat-msg assistant">${welcomeMsg}</div>`;
+        }
+        
+        function clearChat() {
+            chatHistory = [];
+            const category = document.getElementById('user-category').value;
+            const welcomeMsg = `Welcome! I'm your product development assistant for <strong>${CATEGORY_NAMES[category]}</strong>. How can I help you today?`;
+            document.getElementById('chat-messages').innerHTML = `<div class="chat-msg assistant">${welcomeMsg}</div>`;
+        }
+        
+        async function sendChat() {
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            if (!message) return;
+            
+            const category = document.getElementById('user-category').value;
+            const messagesDiv = document.getElementById('chat-messages');
+            
+            // Add user message to UI
+            messagesDiv.innerHTML += `<div class="chat-msg user">${message}</div>`;
+            input.value = '';
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            
+            // Add to history
+            chatHistory.push({role: 'user', content: message});
+            
+            // Show typing indicator
+            messagesDiv.innerHTML += `<div class="chat-msg assistant" id="typing">Thinking...</div>`;
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            
+            try {
+                const resp = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        category: category,
+                        messages: chatHistory,
+                        system_prompt: CATEGORY_PROMPTS[category]
+                    })
+                });
+                
+                const data = await resp.json();
+                document.getElementById('typing')?.remove();
+                
+                if (data.error) {
+                    messagesDiv.innerHTML += `<div class="chat-msg error">Error: ${data.error}</div>`;
+                } else {
+                    chatHistory.push({role: 'assistant', content: data.response});
+                    messagesDiv.innerHTML += `<div class="chat-msg assistant">${data.response.replace(/\\n/g, '<br>')}</div>`;
+                }
+            } catch (e) {
+                document.getElementById('typing')?.remove();
+                messagesDiv.innerHTML += `<div class="chat-msg error">Error: ${e.message}</div>`;
+            }
+            
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
         
         function showTab(tab) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -2583,6 +2690,40 @@ def clear_all_products():
     """Delete all products."""
     Product.clear_all()
     return jsonify({"success": True})
+
+
+@app.route('/api/chat', methods=['POST'])
+def chat_with_assistant():
+    """Chat with AI assistant using OpenAI API."""
+    import openai
+    from config import OPENAI_API_KEY
+    
+    if not OPENAI_API_KEY:
+        return jsonify({"error": "OpenAI API key not configured"}), 500
+    
+    data = request.json
+    system_prompt = data.get('system_prompt', 'You are a helpful product development assistant.')
+    messages = data.get('messages', [])
+    
+    try:
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        
+        # Build messages with system prompt
+        api_messages = [{"role": "system", "content": system_prompt}]
+        api_messages.extend(messages)
+        
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=api_messages,
+            max_tokens=1000,
+            temperature=0.7
+        )
+        
+        assistant_response = response.choices[0].message.content
+        return jsonify({"response": assistant_response})
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/templates/csv')
