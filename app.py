@@ -677,14 +677,14 @@ HTML_TEMPLATE = '''
                 const rowIdx = startIdx + i;
                 if (rowIdx < products.length) {
                     const p = products[rowIdx];
+                    const originalMNumber = p.m_number; // Capture BEFORE updating
                     const updateData = {};
                     fieldMap.forEach((f, colIdx) => {
                         if (cols[colIdx] !== undefined) {
                             updateData[f] = cols[colIdx].trim();
-                            p[f] = cols[colIdx].trim();
                         }
                     });
-                    updates.push(fetch(`/api/products/${p.m_number}`, {
+                    updates.push(fetch(`/api/products/${originalMNumber}`, {
                         method: 'PATCH',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(updateData)
@@ -692,8 +692,8 @@ HTML_TEMPLATE = '''
                 }
             });
             
-            // Wait for all updates then refresh
-            Promise.all(updates).then(() => renderProductsTable());
+            // Wait for all updates then refresh from server
+            Promise.all(updates).then(() => loadProducts());
         }
         
         // Delete selected rows
