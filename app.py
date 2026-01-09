@@ -2310,31 +2310,23 @@ Use Cases: ${useCases}
                 const theme = document.getElementById('theme')?.value || '';
                 const useCases = document.getElementById('use-cases')?.value || '';
                 
-                const resp = await fetch('/api/export/amazon', {
+                const resp = await fetch('/api/generate/amazon-flatfile', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ theme, use_cases: useCases })
                 });
                 
-                if (!resp.ok) {
-                    const errorData = await resp.json();
-                    throw new Error(errorData.error || 'Failed to generate flatfile');
+                const data = await resp.json();
+                
+                if (data.success) {
+                    status.textContent = `✓ Amazon flatfile generated! (${data.product_count} products)`;
+                    status.style.color = 'green';
+                    exportLog(`Amazon flatfile generated: ${data.product_count} products`, 'success');
+                    // Refresh the preview table
+                    loadFlatfilePreview();
+                } else {
+                    throw new Error(data.error || 'Failed to generate flatfile');
                 }
-                
-                // Download the file
-                const blob = await resp.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `amazon_flatfile_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.xlsx`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
-                
-                status.textContent = '✓ Amazon flatfile downloaded!';
-                status.style.color = 'green';
-                exportLog('Amazon flatfile downloaded successfully', 'success');
             } catch (e) {
                 status.textContent = 'Error generating Amazon flatfile';
                 status.style.color = 'red';
