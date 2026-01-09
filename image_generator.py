@@ -323,9 +323,14 @@ def _inject_icon(root: etree._Element, icon_root: etree._Element, x: float, y: f
     icon_group.set("transform", f"translate({offset_x},{offset_y}) scale({scale})")
     
     for child in icon_root:
+        # Skip non-element nodes (comments, processing instructions)
+        if not isinstance(child.tag, str):
+            continue
         tag_local = etree.QName(child).localname
         if tag_local not in ("defs", "namedview", "metadata"):
-            icon_group.append(child)
+            # Deep copy the child to avoid modifying the original
+            import copy
+            icon_group.append(copy.deepcopy(child))
 
 
 def _inject_png_icon(root: etree._Element, png_data: tuple, x: float, y: float, width: float, height: float):
