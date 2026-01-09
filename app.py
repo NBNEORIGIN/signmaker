@@ -514,7 +514,7 @@ HTML_TEMPLATE = '''
                         <strong>M Number folders are automatically saved to Google Drive</strong> when you upload images to R2 (Step 2).<br>
                         Location: <code>G:\My Drive\001 NBNE\001 M\</code>
                     </p>
-                    <button class="btn btn-outline-secondary" onclick="window.open('file:///G:/My%20Drive/001%20NBNE/001%20M/', '_blank')">📂 Open M Number Folder</button>
+                    <button class="btn btn-outline-secondary" onclick="openMNumberFolder()">📂 Open M Number Folder</button>
                     <span id="folders-status" style="margin-left: 15px; font-size: 12px; color: green;">No manual download needed!</span>
                 </div>
                 
@@ -2695,6 +2695,25 @@ Use Cases: ${useCases}
             }
         }
         
+        // Open M Number folder in Windows Explorer
+        async function openMNumberFolder() {
+            try {
+                const resp = await fetch('/api/open-folder', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({type: 'm_number'})
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    exportLog(`Opened folder: ${data.path}`, 'success');
+                } else {
+                    exportLog(`Error: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                exportLog(`Error: ${e.message}`, 'error');
+            }
+        }
+        
         // Download Etsy file
         async function downloadEtsyFile() {
             exportLog('Generating Etsy file for download...');
@@ -4136,6 +4155,40 @@ def preview_lifestyle_image(m_number):
     if not file_path.exists():
         return "File not found", 404
     return send_file(file_path)
+
+
+@app.route('/api/open-folder', methods=['POST'])
+def open_folder():
+    """Open a folder in the system file explorer."""
+    import subprocess
+    import os
+    
+    data = request.json or {}
+    folder_type = data.get('type', 'm_number')
+    
+    # Define folder paths
+    FOLDERS = {
+        'm_number': r"G:\My Drive\001 NBNE\001 M",
+        'exports': r"G:\My Drive\003 APPS\019 - AMAZON PUBLISHER REV 2.0\exports",
+    }
+    
+    folder_path = FOLDERS.get(folder_type)
+    if not folder_path:
+        return jsonify({"success": False, "error": f"Unknown folder type: {folder_type}"}), 400
+    
+    if not os.path.exists(folder_path):
+        # Try to create it
+        try:
+            os.makedirs(folder_path, exist_ok=True)
+        except Exception as e:
+            return jsonify({"success": False, "error": f"Folder does not exist and could not be created: {folder_path}"}), 400
+    
+    try:
+        # Open folder in Windows Explorer
+        subprocess.Popen(['explorer', folder_path])
+        return jsonify({"success": True, "path": folder_path})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/export/m-folders', methods=['POST'])
