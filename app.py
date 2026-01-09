@@ -4216,6 +4216,9 @@ def upload_images_to_r2():
     
     logging.info(f"Starting R2 upload for {len(products)} products")
     
+    # Google Drive exports folder - auto-save M Number folders here
+    GDRIVE_EXPORTS_PATH = Path(r"G:\My Drive\003 APPS\019 - AMAZON PUBLISHER REV 2.0\exports")
+    
     # Image types: 001=main, 002=dimensions, 003=peel_and_stick, 004=rear
     IMAGE_TYPES = [
         ('main', '001'),
@@ -4226,6 +4229,7 @@ def upload_images_to_r2():
     
     results = []
     total_uploaded = 0
+    total_saved_gdrive = 0
     errors = []
     
     for product in products:
@@ -4261,11 +4265,29 @@ def upload_images_to_r2():
                 
                 # Upload to R2
                 r2_key = f"{m_number} - {img_num}.jpg"
-                upload_to_r2(jpg_bytes.getvalue(), r2_key, content_type='image/jpeg')
+                jpg_data = jpg_bytes.getvalue()
+                upload_to_r2(jpg_data, r2_key, content_type='image/jpeg')
                 
                 product_results['images'].append(r2_key)
                 total_uploaded += 1
                 logging.info(f"Uploaded {r2_key}")
+                
+                # Also save to Google Drive M Number folder
+                try:
+                    description = product.get('description', 'Sign')
+                    color = product.get('color', 'Silver').title()
+                    size = product.get('size', 'Saville').title()
+                    folder_name = f"{m_number} Self Adhesive {description} aluminium sign {color} {size}"
+                    folder_path = GDRIVE_EXPORTS_PATH / folder_name
+                    folder_path.mkdir(parents=True, exist_ok=True)
+                    
+                    # Save the JPEG
+                    img_path = folder_path / f"{m_number} - {img_num}.jpg"
+                    with open(img_path, 'wb') as f:
+                        f.write(jpg_data)
+                    total_saved_gdrive += 1
+                except Exception as gdrive_err:
+                    logging.warning(f"Failed to save {r2_key} to Google Drive: {gdrive_err}")
                 
             except Exception as e:
                 import traceback
@@ -4275,14 +4297,15 @@ def upload_images_to_r2():
         
         results.append(product_results)
     
-    logging.info(f"R2 upload complete: {total_uploaded} uploaded, {len(errors)} errors")
+    logging.info(f"R2 upload complete: {total_uploaded} uploaded, {total_saved_gdrive} saved to Google Drive, {len(errors)} errors")
     
     return jsonify({
         "success": True if total_uploaded > 0 else False,
         "total_uploaded": total_uploaded,
+        "total_saved_gdrive": total_saved_gdrive,
         "products": len(products),
         "errors": errors[:20] if errors else [],
-        "message": f"Uploaded {total_uploaded} images for {len(products)} products" + (f" ({len(errors)} errors)" if errors else "")
+        "message": f"Uploaded {total_uploaded} images for {len(products)} products. Also saved to Google Drive exports folder." + (f" ({len(errors)} errors)" if errors else "")
     })
 
 
