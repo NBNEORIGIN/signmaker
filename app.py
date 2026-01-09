@@ -512,9 +512,9 @@ HTML_TEMPLATE = '''
                     <h3 style="margin: 0 0 10px 0;">📁 Step 3: M Number Folders ✅ Auto-Saved</h3>
                     <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
                         <strong>M Number folders are automatically saved to Google Drive</strong> when you upload images to R2 (Step 2).<br>
-                        Location: <code>G:\My Drive\003 APPS\019 - AMAZON PUBLISHER REV 2.0\exports\</code>
+                        Location: <code>G:\My Drive\001 NBNE\001 M\</code>
                     </p>
-                    <button class="btn btn-outline-secondary" onclick="window.open('file:///G:/My%20Drive/003%20APPS/019%20-%20AMAZON%20PUBLISHER%20REV%202.0/exports/', '_blank')">📂 Open Exports Folder</button>
+                    <button class="btn btn-outline-secondary" onclick="window.open('file:///G:/My%20Drive/001%20NBNE/001%20M/', '_blank')">📂 Open M Number Folder</button>
                     <span id="folders-status" style="margin-left: 15px; font-size: 12px; color: green;">No manual download needed!</span>
                 </div>
                 
@@ -4217,8 +4217,8 @@ def upload_images_to_r2():
     
     logging.info(f"Starting R2 upload for {len(products)} products")
     
-    # Google Drive exports folder - auto-save M Number folders here
-    GDRIVE_EXPORTS_PATH = Path(r"G:\My Drive\003 APPS\019 - AMAZON PUBLISHER REV 2.0\exports")
+    # Google Drive M Number folders location
+    GDRIVE_EXPORTS_PATH = Path(r"G:\My Drive\001 NBNE\001 M")
     
     # Image types: 001=main, 002=dimensions, 003=peel_and_stick, 004=rear
     IMAGE_TYPES = [
