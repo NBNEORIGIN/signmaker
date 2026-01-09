@@ -51,12 +51,9 @@ TEMPLATE_SIGN_BOUNDS = {
     "baby_jesus": (25, 25, 240, 140),
 }
 
-# Peel and stick template has different sign positions (sign is smaller, positioned lower-left)
+# Peel and stick template has different sign positions for baby_jesus only
+# Other sizes work correctly with the main template bounds
 PEEL_AND_STICK_SIGN_BOUNDS = {
-    "saville": (8, 95, 60, 40),
-    "dick": (8, 95, 70, 45),
-    "barzan": (8, 95, 100, 70),
-    "dracula": (15, 95, 50, 50),
     "baby_jesus": (8, 120, 130, 85),
 }
 
