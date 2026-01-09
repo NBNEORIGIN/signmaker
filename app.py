@@ -649,15 +649,19 @@ HTML_TEMPLATE = '''
             const clipboardData = event.clipboardData || window.clipboardData;
             const pastedText = clipboardData.getData('text');
             
+            console.log('Pasted text:', pastedText);
+            
             // Check if it's multi-line paste
-            const lines = pastedText.trim().split(/[\\r\\n]+/);
+            const lines = pastedText.trim().split(/\\r?\\n|\\r/);
+            console.log('Lines:', lines.length, lines);
             if (lines.length <= 1) return; // Let default paste handle single values
             
             event.preventDefault();
             
-            // Parse pasted data - detect if multiple columns
-            const rows = lines.map(line => line.split('\\t'));
+            // Parse pasted data - detect if multiple columns (tab character)
+            const rows = lines.map(line => line.split(String.fromCharCode(9)));
             const numCols = rows[0] ? rows[0].length : 1;
+            console.log('Rows:', rows, 'Cols:', numCols);
             
             // Define column mapping based on which field was clicked
             // If pasting into m_number with 3 columns, assume: m_number, description, ean
@@ -2563,6 +2567,7 @@ def get_product(m_number):
 @app.route('/api/products/<m_number>', methods=['PATCH'])
 def update_product(m_number):
     data = request.json
+    print(f"PATCH {m_number}: {data}")  # Debug logging
     Product.update(m_number, data)
     return jsonify({"success": True})
 
