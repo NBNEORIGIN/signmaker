@@ -46,17 +46,20 @@ def _get_drive_service():
 
 
 def find_folder_by_name(name: str, parent_id: Optional[str] = None) -> Optional[str]:
-    """Find a folder by name, optionally within a parent folder."""
+    """Find a folder by name, optionally within a parent folder. Supports Shared Drives."""
     service = _get_drive_service()
     
     query = f"name = '{name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
     if parent_id:
         query += f" and '{parent_id}' in parents"
     
+    # includeItemsFromAllDrives and supportsAllDrives enable Shared Drive support
     results = service.files().list(
         q=query,
         spaces='drive',
-        fields='files(id, name)'
+        fields='files(id, name)',
+        includeItemsFromAllDrives=True,
+        supportsAllDrives=True
     ).execute()
     
     files = results.get('files', [])
@@ -64,7 +67,7 @@ def find_folder_by_name(name: str, parent_id: Optional[str] = None) -> Optional[
 
 
 def create_folder(name: str, parent_id: Optional[str] = None) -> str:
-    """Create a folder and return its ID."""
+    """Create a folder and return its ID. Supports Shared Drives."""
     service = _get_drive_service()
     
     file_metadata = {
@@ -74,7 +77,12 @@ def create_folder(name: str, parent_id: Optional[str] = None) -> str:
     if parent_id:
         file_metadata['parents'] = [parent_id]
     
-    folder = service.files().create(body=file_metadata, fields='id').execute()
+    # supportsAllDrives enables Shared Drive support
+    folder = service.files().create(
+        body=file_metadata, 
+        fields='id',
+        supportsAllDrives=True
+    ).execute()
     return folder['id']
 
 
@@ -87,7 +95,7 @@ def get_or_create_folder(name: str, parent_id: Optional[str] = None) -> str:
 
 
 def upload_file(file_bytes: bytes, filename: str, folder_id: str, mime_type: str = 'image/jpeg') -> str:
-    """Upload a file to a folder and return its ID."""
+    """Upload a file to a folder and return its ID. Supports Shared Drives."""
     service = _get_drive_service()
     
     file_metadata = {
@@ -97,10 +105,12 @@ def upload_file(file_bytes: bytes, filename: str, folder_id: str, mime_type: str
     
     media = MediaIoBaseUpload(BytesIO(file_bytes), mimetype=mime_type, resumable=True)
     
+    # supportsAllDrives enables Shared Drive support
     file = service.files().create(
         body=file_metadata,
         media_body=media,
-        fields='id'
+        fields='id',
+        supportsAllDrives=True
     ).execute()
     
     return file['id']
