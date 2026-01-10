@@ -4964,10 +4964,11 @@ def upload_to_gdrive_stream():
                     yield json.dumps({"type": "progress", "current": i + 1, "m_number": m_number, "created": total_created}) + "\n"
                     
                 except Exception as e:
-                    error_msg = f"{m_number}: {str(e)}"
+                    tb = traceback.format_exc()
+                    error_msg = f"{m_number}: {type(e).__name__}: {str(e) or 'No message'}"
                     errors.append(error_msg)
-                    logging.error(f"GDrive error: {error_msg}\n{traceback.format_exc()}")
-                    yield json.dumps({"type": "error", "error": error_msg}) + "\n"
+                    logging.error(f"GDrive error: {error_msg}\n{tb}")
+                    yield json.dumps({"type": "error", "error": f"{error_msg} | {tb[-200:]}"}) + "\n"
             
             yield json.dumps({"type": "complete", "created": total_created, "products": len(products), "errors": len(errors)}) + "\n"
             
