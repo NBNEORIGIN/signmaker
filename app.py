@@ -5120,7 +5120,7 @@ def download_m_folders_zip():
     try:
         from image_generator import generate_product_image, generate_master_svg_for_product
         
-        products = get_products()
+        products = Product.all()
         if not products:
             return jsonify({"error": "No products found"}), 400
         
