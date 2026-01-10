@@ -125,8 +125,7 @@ def create_m_number_folder_simple(
     parent_folder_id: str
 ) -> dict:
     """
-    Create a simple M Number folder with just images subfolder.
-    Minimal API calls for speed.
+    Create full M Number folder structure in Google Drive.
     
     Returns dict with folder IDs.
     """
@@ -143,11 +142,27 @@ def create_m_number_folder_simple(
     # Create main M Number folder
     main_folder_id = get_or_create_folder(folder_name, parent_folder_id)
     
-    # Create only images subfolder (minimal API calls)
+    # Create all subfolders
     folders = {
         'main': main_folder_id,
+        '000_archive': get_or_create_folder('000 Archive', main_folder_id),
+        '001_design': get_or_create_folder('001 Design', main_folder_id),
         '002_images': get_or_create_folder('002 Images', main_folder_id),
+        '003_blanks': get_or_create_folder('003 Blanks', main_folder_id),
+        '004_sops': get_or_create_folder('004 SOPs', main_folder_id),
     }
+    
+    # Create design subfolders
+    design_id = folders['001_design']
+    folders['design_000_archive'] = get_or_create_folder('000 Archive', design_id)
+    folders['design_001_master'] = get_or_create_folder('001 MASTER FILE', design_id)
+    folders['design_002_mutoh'] = get_or_create_folder('002 MUTOH', design_id)
+    folders['design_003_mimaki'] = get_or_create_folder('003 MIMAKI', design_id)
+    folders['design_004_roland'] = get_or_create_folder('004 ROLAND', design_id)
+    folders['design_005_image_gen'] = get_or_create_folder('005 IMAGE GENERATION', design_id)
+    folders['design_006_hulk'] = get_or_create_folder('006 HULK', design_id)
+    folders['design_007_epson'] = get_or_create_folder('007 EPSON', design_id)
+    folders['design_008_rolf'] = get_or_create_folder('008 ROLF', design_id)
     
     return folders
 

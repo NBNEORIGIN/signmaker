@@ -4925,40 +4925,51 @@ def upload_to_gdrive_stream():
                         parent_folder_id=parent_folder_id
                     )
                     
-                    yield json.dumps({"type": "status", "message": f"Generating image for {m_number}..."}) + "\n"
+                    # Generate and upload all 4 image types
+                    from image_generator import generate_product_image
+                    IMAGE_TYPES = [
+                        ("main", "001"),
+                        ("dimensions", "002"),
+                        ("peel_and_stick", "003"),
+                        ("rear", "004"),
+                    ]
                     
-                    # Generate and upload main image (PNG and JPEG) - use preview for speed
-                    png_bytes = generate_product_image_preview(product)
-                    
-                    yield json.dumps({"type": "status", "message": f"Uploading PNG for {m_number}..."}) + "\n"
-                    
-                    # Upload PNG
-                    gdrive_storage.upload_file(
-                        png_bytes, 
-                        f"{m_number} - 001.png",
-                        folders['002_images'],
-                        'image/png'
-                    )
-                    
-                    # Convert to JPEG and upload
-                    img = Image.open(BytesIO(png_bytes))
-                    if img.mode == 'RGBA':
-                        bg = Image.new('RGB', img.size, (255, 255, 255))
-                        bg.paste(img, mask=img.split()[3])
-                        img = bg
-                    else:
-                        img = img.convert('RGB')
-                    
-                    jpg_bytes = BytesIO()
-                    img.save(jpg_bytes, 'JPEG', quality=85)
-                    jpg_bytes.seek(0)
-                    
-                    gdrive_storage.upload_file(
-                        jpg_bytes.getvalue(),
-                        f"{m_number} - 001.jpg",
-                        folders['002_images'],
-                        'image/jpeg'
-                    )
+                    for img_type, img_num in IMAGE_TYPES:
+                        yield json.dumps({"type": "status", "message": f"Generating {img_type} image for {m_number}..."}) + "\n"
+                        
+                        try:
+                            png_bytes = generate_product_image(product, img_type)
+                        except Exception as img_err:
+                            logging.warning(f"Failed to generate {img_type} for {m_number}: {img_err}")
+                            continue
+                        
+                        # Upload PNG
+                        gdrive_storage.upload_file(
+                            png_bytes, 
+                            f"{m_number} - {img_num}.png",
+                            folders['002_images'],
+                            'image/png'
+                        )
+                        
+                        # Convert to JPEG and upload
+                        img = Image.open(BytesIO(png_bytes))
+                        if img.mode == 'RGBA':
+                            bg = Image.new('RGB', img.size, (255, 255, 255))
+                            bg.paste(img, mask=img.split()[3])
+                            img = bg
+                        else:
+                            img = img.convert('RGB')
+                        
+                        jpg_bytes = BytesIO()
+                        img.save(jpg_bytes, 'JPEG', quality=85)
+                        jpg_bytes.seek(0)
+                        
+                        gdrive_storage.upload_file(
+                            jpg_bytes.getvalue(),
+                            f"{m_number} - {img_num}.jpg",
+                            folders['002_images'],
+                            'image/jpeg'
+                        )
                     
                     total_created += 1
                     yield json.dumps({"type": "progress", "current": i + 1, "m_number": m_number, "created": total_created}) + "\n"
