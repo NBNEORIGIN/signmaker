@@ -4502,19 +4502,29 @@ def upload_images_to_r2():
     """Generate all product images and upload to R2 for marketplace use."""
     import logging
     import os
+    import traceback
     from io import BytesIO
     from PIL import Image
-    from image_generator import generate_product_image
+    
+    try:
+        from image_generator import generate_product_image
+    except Exception as e:
+        logging.error(f"Failed to import image_generator: {e}\n{traceback.format_exc()}")
+        return jsonify({"success": False, "error": f"Image generator import failed: {e}"}), 500
     
     # Disable PIL decompression bomb check for large images
     Image.MAX_IMAGE_PIXELS = None
     
     # Check R2 credentials
-    from config import R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_PUBLIC_URL
+    try:
+        from config import R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_PUBLIC_URL
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Config import failed: {e}"}), 500
+        
     if not R2_ACCOUNT_ID or not R2_ACCESS_KEY_ID or not R2_SECRET_ACCESS_KEY:
         return jsonify({"success": False, "error": "R2 credentials not configured. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY environment variables."}), 500
     
-    logging.info(f"R2 Config: account={R2_ACCOUNT_ID[:8]}..., public_url={R2_PUBLIC_URL}")
+    logging.info(f"R2 Config: account={R2_ACCOUNT_ID[:8] if R2_ACCOUNT_ID else 'None'}..., public_url={R2_PUBLIC_URL}")
     
     try:
         from r2_storage import upload_image as upload_to_r2
@@ -4667,14 +4677,19 @@ def upload_images_to_r2():
     
     logging.info(f"R2 upload complete: {total_uploaded} uploaded, {total_saved_gdrive} saved to Google Drive, {len(errors)} errors")
     
-    return jsonify({
-        "success": True if total_uploaded > 0 else False,
-        "total_uploaded": total_uploaded,
-        "total_saved_gdrive": total_saved_gdrive,
-        "products": len(products),
-        "errors": errors[:20] if errors else [],
-        "message": f"Uploaded {total_uploaded} images for {len(products)} products. Also saved to Google Drive exports folder." + (f" ({len(errors)} errors)" if errors else "")
-    })
+    try:
+        return jsonify({
+            "success": True if total_uploaded > 0 else False,
+            "total_uploaded": total_uploaded,
+            "total_saved_gdrive": total_saved_gdrive,
+            "products": len(products),
+            "errors": errors[:20] if errors else [],
+            "message": f"Uploaded {total_uploaded} images for {len(products)} products." + (f" Also saved to Google Drive." if save_to_gdrive else "") + (f" ({len(errors)} errors)" if errors else "")
+        })
+    except Exception as e:
+        import traceback
+        logging.error(f"Failed in R2 upload: {e}\n{traceback.format_exc()}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/export/images/<m_number>')
