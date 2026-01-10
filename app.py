@@ -493,16 +493,25 @@ HTML_TEMPLATE = '''
                 
                 <!-- Step 2: Upload Images & Create M Number Folders -->
                 <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                    <h3 style="margin: 0 0 10px 0;">☁️ Step 2: Upload Images & Create M Number Folders</h3>
+                    <h3 style="margin: 0 0 10px 0;">☁️ Step 2: Upload Images to R2</h3>
                     <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
-                        Generate all product images, upload to R2 for marketplace URLs, <strong>AND automatically save M Number folders to Google Drive</strong>.<br>
-                        Location: <code>G:\My Drive\001 NBNE\001 M\</code>
+                        Generate product images and upload to R2 for marketplace URLs.
                     </p>
                     <button class="btn btn-warning" onclick="uploadImagesToR2()" id="btn-upload-r2" style="padding: 10px 20px;">
-                        ☁️ Upload Images & Save to Google Drive
+                        ☁️ Upload All Images to R2
                     </button>
-                    <button class="btn btn-outline-secondary" onclick="openMNumberFolder()" style="margin-left: 10px;">📂 Open M Folder</button>
                     <br><span id="r2-upload-status" style="margin-top: 10px; display: inline-block; font-size: 12px;"></span>
+                </div>
+                
+                <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <h3 style="margin: 0 0 10px 0;">📁 Step 3: Create M Number Folders on Google Drive</h3>
+                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                        Create full M Number folder structure with images and master SVG files on Google Drive.
+                    </p>
+                    <button class="btn btn-success" onclick="uploadToGDrive()" id="btn-upload-gdrive" style="padding: 10px 20px;">
+                        📁 Create M Number Folders on Google Drive
+                    </button>
+                    <br><span id="gdrive-upload-status" style="margin-top: 10px; display: inline-block; font-size: 12px;"></span>
                 </div>
                 
                 <!-- Amazon Flatfile Preview Table -->
@@ -1421,6 +1430,64 @@ HTML_TEMPLATE = '''
             
             btn.disabled = false;
             btn.textContent = '☁️ Upload All Images to R2';
+        }
+        
+        async function uploadToGDrive() {
+            const btn = document.getElementById('btn-upload-gdrive');
+            const status = document.getElementById('gdrive-upload-status');
+            
+            btn.disabled = true;
+            btn.textContent = '⏳ Creating folders...';
+            status.innerHTML = '<div style="margin-bottom: 10px;"><progress id="gdrive-progress" value="0" max="100" style="width: 100%; height: 20px;"></progress></div><div id="gdrive-progress-text" style="color: #666;">Starting Google Drive upload...</div>';
+            
+            try {
+                const resp = await fetch('/api/upload-to-gdrive-stream', {method: 'POST'});
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                const progressBar = document.getElementById('gdrive-progress');
+                const progressText = document.getElementById('gdrive-progress-text');
+                
+                let totalCreated = 0;
+                let totalProducts = 0;
+                let errors = [];
+                
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    
+                    const lines = decoder.decode(value).split('\\n');
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        try {
+                            const data = JSON.parse(line);
+                            if (data.type === 'start') {
+                                totalProducts = data.total;
+                                progressText.textContent = `Creating folders for ${totalProducts} products...`;
+                            } else if (data.type === 'progress') {
+                                totalCreated = data.created;
+                                const percent = Math.round((data.current / totalProducts) * 100);
+                                progressBar.value = percent;
+                                progressText.innerHTML = `<span style="color: #666;">Creating ${data.m_number}... (${data.current}/${totalProducts})</span>`;
+                            } else if (data.type === 'error') {
+                                errors.push(data.error);
+                            } else if (data.type === 'complete') {
+                                progressBar.value = 100;
+                                let msg = `<span style="color: green;">✅ Created ${data.created} M Number folders on Google Drive</span>`;
+                                if (errors.length > 0) {
+                                    msg += `<br><span style="color: orange;">⚠️ ${errors.length} errors (see console)</span>`;
+                                    console.log('GDrive errors:', errors);
+                                }
+                                progressText.innerHTML = msg;
+                            }
+                        } catch (e) {}
+                    }
+                }
+            } catch (e) {
+                status.innerHTML = `<span style="color: red;">❌ Error: ${e.message}</span>`;
+            }
+            
+            btn.disabled = false;
+            btn.textContent = '📁 Create M Number Folders on Google Drive';
         }
         
         async function generateImages() {
@@ -4799,6 +4866,147 @@ def upload_images_to_r2_stream():
             yield json.dumps({"type": "error", "error": str(e)}) + "\n"
     
     return Response(generate(), mimetype='application/x-ndjson')
+
+
+@app.route('/api/upload-to-gdrive-stream', methods=['POST'])
+@login_required
+def upload_to_gdrive_stream():
+    """Stream Google Drive folder creation with progress updates."""
+    import json
+    import logging
+    import traceback
+    from io import BytesIO
+    from PIL import Image
+    
+    def generate():
+        try:
+            from image_generator import generate_product_image, generate_master_svg_for_product
+            import gdrive_storage
+            
+            if not gdrive_storage.is_configured():
+                yield json.dumps({"type": "error", "error": "Google Drive not configured. Set GOOGLE_DRIVE_CREDENTIALS environment variable."}) + "\n"
+                return
+            
+            parent_folder_id = gdrive_storage.get_parent_folder_id()
+            if not parent_folder_id:
+                yield json.dumps({"type": "error", "error": "GOOGLE_DRIVE_PARENT_FOLDER_ID not set"}) + "\n"
+                return
+            
+            Image.MAX_IMAGE_PIXELS = None
+            
+            products = Product.all()
+            if not products:
+                yield json.dumps({"type": "error", "error": "No products found"}) + "\n"
+                return
+            
+            yield json.dumps({"type": "start", "total": len(products)}) + "\n"
+            
+            total_created = 0
+            errors = []
+            
+            for i, product in enumerate(products):
+                m_number = product['m_number']
+                
+                try:
+                    # Create folder structure
+                    folders = gdrive_storage.create_m_number_folder_structure(
+                        m_number=m_number,
+                        description=product.get('description', 'Sign'),
+                        color=product.get('color', 'silver'),
+                        size=product.get('size', 'saville'),
+                        mounting_type=product.get('mounting_type', 'self_adhesive'),
+                        parent_folder_id=parent_folder_id
+                    )
+                    
+                    # Generate and upload main image (PNG and JPEG)
+                    png_bytes = generate_product_image(product, "main")
+                    
+                    # Upload PNG
+                    gdrive_storage.upload_file(
+                        png_bytes, 
+                        f"{m_number} - 001.png",
+                        folders['002_images'],
+                        'image/png'
+                    )
+                    
+                    # Convert to JPEG and upload
+                    img = Image.open(BytesIO(png_bytes))
+                    if img.mode == 'RGBA':
+                        bg = Image.new('RGB', img.size, (255, 255, 255))
+                        bg.paste(img, mask=img.split()[3])
+                        img = bg
+                    else:
+                        img = img.convert('RGB')
+                    
+                    jpg_bytes = BytesIO()
+                    img.save(jpg_bytes, 'JPEG', quality=85)
+                    jpg_bytes.seek(0)
+                    
+                    gdrive_storage.upload_file(
+                        jpg_bytes.getvalue(),
+                        f"{m_number} - 001.jpg",
+                        folders['002_images'],
+                        'image/jpeg'
+                    )
+                    
+                    # Generate and upload master SVG
+                    try:
+                        master_svg = generate_master_svg_for_product(product)
+                        gdrive_storage.upload_file(
+                            master_svg.encode('utf-8') if isinstance(master_svg, str) else master_svg,
+                            f"{m_number} MASTER FILE.svg",
+                            folders['design_001_master'],
+                            'image/svg+xml'
+                        )
+                    except Exception as svg_err:
+                        logging.warning(f"Failed to generate master SVG for {m_number}: {svg_err}")
+                    
+                    total_created += 1
+                    yield json.dumps({"type": "progress", "current": i + 1, "m_number": m_number, "created": total_created}) + "\n"
+                    
+                except Exception as e:
+                    error_msg = f"{m_number}: {str(e)}"
+                    errors.append(error_msg)
+                    logging.error(f"GDrive error: {error_msg}\n{traceback.format_exc()}")
+                    yield json.dumps({"type": "error", "error": error_msg}) + "\n"
+            
+            yield json.dumps({"type": "complete", "created": total_created, "products": len(products), "errors": len(errors)}) + "\n"
+            
+        except Exception as e:
+            logging.error(f"GDrive stream error: {e}\n{traceback.format_exc()}")
+            yield json.dumps({"type": "error", "error": str(e)}) + "\n"
+    
+    return Response(generate(), mimetype='application/x-ndjson')
+
+
+@app.route('/api/debug/gdrive')
+@login_required
+def debug_gdrive():
+    """Test Google Drive configuration."""
+    import gdrive_storage
+    
+    result = {
+        "google_api_available": gdrive_storage.GOOGLE_API_AVAILABLE,
+        "credentials_set": gdrive_storage.is_configured(),
+        "parent_folder_id": gdrive_storage.get_parent_folder_id()
+    }
+    
+    if result["credentials_set"] and result["parent_folder_id"]:
+        try:
+            # Try to list files in parent folder
+            service = gdrive_storage._get_drive_service()
+            results = service.files().list(
+                q=f"'{result['parent_folder_id']}' in parents and trashed = false",
+                pageSize=5,
+                fields="files(id, name)"
+            ).execute()
+            result["test_list"] = [f["name"] for f in results.get("files", [])]
+            result["connection_ok"] = True
+        except Exception as e:
+            result["connection_ok"] = False
+            result["error"] = str(e)
+    
+    return jsonify(result)
 
 
 @app.route('/api/export/images/<m_number>')
