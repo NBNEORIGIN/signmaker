@@ -1371,20 +1371,49 @@ HTML_TEMPLATE = '''
             
             btn.disabled = true;
             btn.textContent = '⏳ Uploading...';
-            status.innerHTML = '<span style="color: #666;">Generating and uploading images to R2. This may take several minutes...</span>';
+            status.innerHTML = '<div style="margin-bottom: 10px;"><progress id="r2-progress" value="0" max="100" style="width: 100%; height: 20px;"></progress></div><div id="r2-progress-text" style="color: #666;">Starting upload...</div>';
             
             try {
-                const resp = await fetch('/api/upload-images-to-r2', {method: 'POST'});
-                const data = await resp.json();
+                const resp = await fetch('/api/upload-images-to-r2-stream', {method: 'POST'});
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                const progressBar = document.getElementById('r2-progress');
+                const progressText = document.getElementById('r2-progress-text');
                 
-                if (data.success) {
-                    status.innerHTML = `<span style="color: green;">✅ ${data.message}</span>`;
-                    if (data.errors && data.errors.length > 0) {
-                        status.innerHTML += `<br><span style="color: orange;">⚠️ ${data.errors.length} errors (see console)</span>`;
-                        console.log('Upload errors:', data.errors);
+                let totalUploaded = 0;
+                let totalProducts = 0;
+                let errors = [];
+                
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    
+                    const lines = decoder.decode(value).split('\\n');
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        try {
+                            const data = JSON.parse(line);
+                            if (data.type === 'start') {
+                                totalProducts = data.total;
+                                progressText.textContent = `Starting upload of ${totalProducts} products...`;
+                            } else if (data.type === 'progress') {
+                                totalUploaded = data.uploaded;
+                                const percent = Math.round((data.current / totalProducts) * 100);
+                                progressBar.value = percent;
+                                progressText.innerHTML = `<span style="color: #666;">Uploading ${data.m_number}... (${data.current}/${totalProducts})</span>`;
+                            } else if (data.type === 'error') {
+                                errors.push(data.error);
+                            } else if (data.type === 'complete') {
+                                progressBar.value = 100;
+                                let msg = `<span style="color: green;">✅ Uploaded ${data.uploaded} images for ${data.products} products</span>`;
+                                if (errors.length > 0) {
+                                    msg += `<br><span style="color: orange;">⚠️ ${errors.length} errors (see console)</span>`;
+                                    console.log('Upload errors:', errors);
+                                }
+                                progressText.innerHTML = msg;
+                            }
+                        } catch (e) {}
                     }
-                } else {
-                    status.innerHTML = `<span style="color: red;">❌ Error: ${data.error}</span>`;
                 }
             } catch (e) {
                 status.innerHTML = `<span style="color: red;">❌ Error: ${e.message}</span>`;
@@ -4688,6 +4717,87 @@ def upload_images_to_r2():
         import traceback
         logging.error(f"Failed in R2 upload: {e}\n{traceback.format_exc()}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/upload-images-to-r2-stream', methods=['POST'])
+@login_required
+def upload_images_to_r2_stream():
+    """Stream R2 upload with progress updates - one product at a time."""
+    import json
+    import logging
+    import traceback
+    from io import BytesIO
+    from PIL import Image
+    
+    def generate():
+        try:
+            from image_generator import generate_product_image
+            from r2_storage import upload_image as upload_to_r2
+            from config import R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
+            
+            Image.MAX_IMAGE_PIXELS = None
+            
+            if not R2_ACCOUNT_ID or not R2_ACCESS_KEY_ID or not R2_SECRET_ACCESS_KEY:
+                yield json.dumps({"type": "error", "error": "R2 credentials not configured"}) + "\n"
+                return
+            
+            products = Product.all()
+            if not products:
+                yield json.dumps({"type": "error", "error": "No products found"}) + "\n"
+                return
+            
+            yield json.dumps({"type": "start", "total": len(products)}) + "\n"
+            
+            total_uploaded = 0
+            errors = []
+            
+            for i, product in enumerate(products):
+                m_number = product['m_number']
+                
+                try:
+                    # Generate main image only
+                    png_bytes = generate_product_image(product, "main")
+                    
+                    # Convert to JPEG
+                    img = Image.open(BytesIO(png_bytes))
+                    if img.mode == 'RGBA':
+                        bg = Image.new('RGB', img.size, (255, 255, 255))
+                        bg.paste(img, mask=img.split()[3])
+                        img = bg
+                    else:
+                        img = img.convert('RGB')
+                    
+                    # Resize if needed
+                    MAX_DIMENSION = 2000
+                    if img.width > MAX_DIMENSION or img.height > MAX_DIMENSION:
+                        ratio = min(MAX_DIMENSION / img.width, MAX_DIMENSION / img.height)
+                        new_size = (int(img.width * ratio), int(img.height * ratio))
+                        img = img.resize(new_size, Image.LANCZOS)
+                    
+                    jpg_bytes = BytesIO()
+                    img.save(jpg_bytes, 'JPEG', quality=85)
+                    jpg_bytes.seek(0)
+                    
+                    # Upload to R2
+                    r2_key = f"{m_number} - 001.jpg"
+                    upload_to_r2(jpg_bytes.getvalue(), r2_key, content_type='image/jpeg')
+                    total_uploaded += 1
+                    
+                    yield json.dumps({"type": "progress", "current": i + 1, "m_number": m_number, "uploaded": total_uploaded}) + "\n"
+                    
+                except Exception as e:
+                    error_msg = f"{m_number}: {str(e)}"
+                    errors.append(error_msg)
+                    logging.error(f"R2 upload error: {error_msg}\n{traceback.format_exc()}")
+                    yield json.dumps({"type": "error", "error": error_msg}) + "\n"
+            
+            yield json.dumps({"type": "complete", "uploaded": total_uploaded, "products": len(products), "errors": len(errors)}) + "\n"
+            
+        except Exception as e:
+            logging.error(f"R2 stream error: {e}\n{traceback.format_exc()}")
+            yield json.dumps({"type": "error", "error": str(e)}) + "\n"
+    
+    return Response(generate(), mimetype='application/x-ndjson')
 
 
 @app.route('/api/export/images/<m_number>')
