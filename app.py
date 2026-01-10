@@ -4541,12 +4541,10 @@ def upload_images_to_r2():
     GDRIVE_EXPORTS_PATH = Path(r"G:\My Drive\001 NBNE\001 M")
     save_to_gdrive = GDRIVE_EXPORTS_PATH.exists()
     
-    # Image types: 001=main, 002=dimensions, 003=peel_and_stick, 004=rear
+    # Image types: Only main image for speed on Render (full set takes too long)
+    # To generate all 4 types, run locally
     IMAGE_TYPES = [
         ('main', '001'),
-        ('dimensions', '002'),
-        ('peel_and_stick', '003'),
-        ('rear', '004'),
     ]
     
     results = []
