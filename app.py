@@ -4603,7 +4603,7 @@ def upload_images_to_r2():
     from PIL import Image
     
     try:
-        from image_generator import generate_product_image
+        from image_generator import generate_product_image_preview
     except Exception as e:
         logging.error(f"Failed to import image_generator: {e}\n{traceback.format_exc()}")
         return jsonify({"success": False, "error": f"Image generator import failed: {e}"}), 500
@@ -4654,8 +4654,8 @@ def upload_images_to_r2():
         
         for img_type, img_num in IMAGE_TYPES:
             try:
-                # Generate PNG image
-                png_bytes = generate_product_image(product, img_type)
+                # Generate PNG image (preview for speed)
+                png_bytes = generate_product_image_preview(product)
                 
                 # Convert to JPEG for smaller file size
                 img = Image.open(BytesIO(png_bytes))
