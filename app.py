@@ -4901,5 +4901,55 @@ def debug_r2():
     })
 
 
+@app.route('/api/debug/generate-image')
+@login_required
+def debug_generate_image():
+    """Test image generation for first product."""
+    import traceback
+    
+    result = {"steps": [], "errors": []}
+    
+    # Step 1: Get a product
+    try:
+        products = Product.all()
+        if not products:
+            return jsonify({"error": "No products found"})
+        product = products[0]
+        result["steps"].append(f"Got product: {product['m_number']}")
+        result["product"] = {k: str(v)[:50] for k, v in product.items()}
+    except Exception as e:
+        result["errors"].append(f"Get product failed: {e}")
+        return jsonify(result)
+    
+    # Step 2: Import image generator
+    try:
+        from image_generator import generate_product_image
+        result["steps"].append("Imported image_generator")
+    except Exception as e:
+        result["errors"].append(f"Import failed: {e}\n{traceback.format_exc()}")
+        return jsonify(result)
+    
+    # Step 3: Generate main image
+    try:
+        png_bytes = generate_product_image(product, "main")
+        result["steps"].append(f"Generated main image: {len(png_bytes)} bytes")
+        result["image_size"] = len(png_bytes)
+    except Exception as e:
+        result["errors"].append(f"Generate failed: {e}\n{traceback.format_exc()}")
+        return jsonify(result)
+    
+    # Step 4: Test R2 upload
+    try:
+        from r2_storage import upload_image as upload_to_r2
+        test_key = f"test_{product['m_number']}.png"
+        url = upload_to_r2(png_bytes, test_key, content_type='image/png')
+        result["steps"].append(f"Uploaded to R2: {url}")
+        result["r2_url"] = url
+    except Exception as e:
+        result["errors"].append(f"R2 upload failed: {e}\n{traceback.format_exc()}")
+    
+    return jsonify(result)
+
+
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
