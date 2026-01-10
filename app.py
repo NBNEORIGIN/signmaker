@@ -3637,7 +3637,7 @@ def generate_content():
     import os
     import base64
     import logging
-    from image_generator import generate_product_image
+    from image_generator import generate_product_image_preview
     
     data = request.json or {}
     theme = data.get('theme', '')
@@ -3655,7 +3655,7 @@ def generate_content():
     
     try:
         from openai import OpenAI
-        client = OpenAI(api_key=api_key)
+        client = OpenAI(api_key=api_key, timeout=120.0)
         
         # Build product summary
         sizes = {}
@@ -3689,17 +3689,18 @@ def generate_content():
         # Build message content with images for GPT-4 Vision
         content = []
         
-        # Add sample images
-        for m_number in sample_m_numbers[:5]:  # Limit to 5 images
+        # Add sample images (use preview for speed, limit to 3)
+        for m_number in sample_m_numbers[:3]:
             product = Product.get(m_number)
             if product:
                 try:
-                    png_bytes = generate_product_image(product, "main")
+                    png_bytes = generate_product_image_preview(product)
                     img_base64 = base64.b64encode(png_bytes).decode()
                     content.append({
                         "type": "image_url",
                         "image_url": {
-                            "url": f"data:image/png;base64,{img_base64}"
+                            "url": f"data:image/png;base64,{img_base64}",
+                            "detail": "low"
                         }
                     })
                     logging.info(f"Added sample image for {m_number}")
