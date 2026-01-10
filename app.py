@@ -226,6 +226,9 @@ HTML_TEMPLATE = '''
         </div>
         <div class="user-info">
             <span class="user-email">{{ current_user.email }}</span>
+            {% if current_user.role == 'admin' %}
+            <a href="/admin/users" class="btn-logout" style="background: #6c757d; margin-right: 5px;">👥 Users</a>
+            {% endif %}
             <a href="/logout" class="btn-logout">Logout</a>
         </div>
     </div>
@@ -3123,6 +3126,191 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for('login', message='You have been logged out'))
+
+
+ADMIN_USERS_TEMPLATE = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SignMaker - User Management</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 { font-size: 1.5rem; }
+        .header a { color: white; text-decoration: none; padding: 8px 16px; background: rgba(255,255,255,0.2); border-radius: 6px; }
+        .header a:hover { background: rgba(255,255,255,0.3); }
+        .container { max-width: 900px; margin: 30px auto; padding: 0 20px; }
+        .card { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .card h2 { margin-bottom: 20px; color: #333; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; font-weight: 600; color: #555; }
+        tr:hover { background: #f8f9fa; }
+        .badge { padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 500; }
+        .badge-admin { background: #667eea; color: white; }
+        .badge-user { background: #e0e0e0; color: #666; }
+        .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; transition: all 0.2s; }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { background: #5a6fd6; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-sm { padding: 5px 10px; font-size: 0.8rem; }
+        .form-row { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .form-group { flex: 1; min-width: 150px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: 500; color: #555; }
+        .form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.95rem; }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: #667eea; }
+        .alert { padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; }
+        .alert-success { background: #d4edda; color: #155724; }
+        .alert-error { background: #f8d7da; color: #721c24; }
+        .text-muted { color: #888; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>👥 User Management</h1>
+        <a href="/">← Back to SignMaker</a>
+    </div>
+    
+    <div class="container">
+        {% if message %}
+        <div class="alert alert-success">{{ message }}</div>
+        {% endif %}
+        {% if error %}
+        <div class="alert alert-error">{{ error }}</div>
+        {% endif %}
+        
+        <div class="card">
+            <h2>Add New User</h2>
+            <form method="POST" action="/admin/users/create">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" name="email" required placeholder="user@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" required placeholder="Min 6 characters" minlength="6">
+                    </div>
+                    <div class="form-group" style="flex: 0.5;">
+                        <label for="role">Role</label>
+                        <select id="role" name="role">
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex: 0; align-self: flex-end;">
+                        <button type="submit" class="btn btn-primary">Add User</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+        
+        <div class="card">
+            <h2>All Users ({{ users|length }})</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Created</th>
+                        <th>Last Login</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.email }}</td>
+                        <td>
+                            <span class="badge {{ 'badge-admin' if user.role == 'admin' else 'badge-user' }}">
+                                {{ user.role }}
+                            </span>
+                        </td>
+                        <td class="text-muted">{{ user.created_at[:16] if user.created_at else 'N/A' }}</td>
+                        <td class="text-muted">{{ user.last_login[:16] if user.last_login else 'Never' }}</td>
+                        <td>
+                            {% if user.email != current_user.email %}
+                            <form method="POST" action="/admin/users/delete/{{ user.id }}" style="display: inline;" 
+                                  onsubmit="return confirm('Delete user {{ user.email }}?');">
+                                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                            </form>
+                            {% else %}
+                            <span class="text-muted">(You)</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
+'''
+
+
+@app.route('/admin/users')
+@login_required
+@admin_required
+def admin_users():
+    users = User.all()
+    message = request.args.get('message')
+    error = request.args.get('error')
+    return render_template_string(ADMIN_USERS_TEMPLATE, users=users, message=message, error=error)
+
+
+@app.route('/admin/users/create', methods=['POST'])
+@login_required
+@admin_required
+def admin_create_user():
+    email = request.form.get('email')
+    password = request.form.get('password')
+    role = request.form.get('role', 'user')
+    
+    if not email or not password:
+        return redirect(url_for('admin_users', error='Email and password are required'))
+    
+    if len(password) < 6:
+        return redirect(url_for('admin_users', error='Password must be at least 6 characters'))
+    
+    try:
+        User.create(email, password, role)
+        return redirect(url_for('admin_users', message=f'User {email} created successfully'))
+    except Exception as e:
+        return redirect(url_for('admin_users', error=f'Failed to create user: {str(e)}'))
+
+
+@app.route('/admin/users/delete/<int:user_id>', methods=['POST'])
+@login_required
+@admin_required
+def admin_delete_user(user_id):
+    if user_id == current_user.id:
+        return redirect(url_for('admin_users', error='Cannot delete your own account'))
+    
+    try:
+        user = User.get_by_id(user_id)
+        if user:
+            User.delete(user_id)
+            return redirect(url_for('admin_users', message=f'User {user.email} deleted'))
+        else:
+            return redirect(url_for('admin_users', error='User not found'))
+    except Exception as e:
+        return redirect(url_for('admin_users', error=f'Failed to delete user: {str(e)}'))
 
 
 @app.route('/')
