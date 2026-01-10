@@ -504,12 +504,15 @@ HTML_TEMPLATE = '''
                 </div>
                 
                 <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                    <h3 style="margin: 0 0 10px 0;">📁 Step 3: Create M Number Folders on Google Drive</h3>
+                    <h3 style="margin: 0 0 10px 0;">📁 Step 3: Download M Number Folders</h3>
                     <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
-                        Create full M Number folder structure with images and master SVG files on Google Drive.
+                        Download ZIP file with full M Number folder structure, images, and master SVG files. Extract to Google Drive manually.
                     </p>
-                    <button class="btn btn-success" onclick="uploadToGDrive()" id="btn-upload-gdrive" style="padding: 10px 20px;">
-                        📁 Create M Number Folders on Google Drive
+                    <button class="btn btn-success" onclick="downloadMNumberZip()" id="btn-download-zip" style="padding: 10px 20px;">
+                        📥 Download M Number Folders (ZIP)
+                    </button>
+                    <button class="btn btn-outline-success" onclick="uploadToGDrive()" id="btn-upload-gdrive" style="padding: 10px 20px; margin-left: 10px;">
+                        📁 Upload to Google Drive (may timeout)
                     </button>
                     <br><span id="gdrive-upload-status" style="margin-top: 10px; display: inline-block; font-size: 12px;"></span>
                 </div>
@@ -1492,7 +1495,50 @@ HTML_TEMPLATE = '''
             }
             
             btn.disabled = false;
-            btn.textContent = '📁 Create M Number Folders on Google Drive';
+            btn.textContent = '📁 Upload to Google Drive (may timeout)';
+        }
+        
+        async function downloadMNumberZip() {
+            const btn = document.getElementById('btn-download-zip');
+            const status = document.getElementById('gdrive-upload-status');
+            
+            btn.disabled = true;
+            btn.textContent = '⏳ Generating ZIP...';
+            status.innerHTML = '<span style="color: #666;">Generating folder structure and images... This may take a few minutes.</span>';
+            
+            try {
+                const response = await fetch('/api/download-m-folders-zip', {method: 'POST'});
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to generate ZIP');
+                }
+                
+                // Get filename from Content-Disposition header
+                const disposition = response.headers.get('Content-Disposition');
+                let filename = 'M_Number_Folders.zip';
+                if (disposition && disposition.includes('filename=')) {
+                    filename = disposition.split('filename=')[1].replace(/"/g, '');
+                }
+                
+                // Download the file
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+                
+                status.innerHTML = '<span style="color: green;">✅ ZIP downloaded! Extract to Google Drive.</span>';
+            } catch (e) {
+                status.innerHTML = `<span style="color: red;">❌ Error: ${e.message}</span>`;
+            }
+            
+            btn.disabled = false;
+            btn.textContent = '📥 Download M Number Folders (ZIP)';
         }
         
         async function generateImages() {
@@ -4871,6 +4917,123 @@ def upload_images_to_r2_stream():
             yield json.dumps({"type": "error", "error": str(e)}) + "\n"
     
     return Response(generate(), mimetype='application/x-ndjson')
+
+
+@app.route('/api/download-m-folders-zip', methods=['POST'])
+@login_required
+def download_m_folders_zip():
+    """Generate and download a ZIP file with full M Number folder structure."""
+    import zipfile
+    import logging
+    import traceback
+    from io import BytesIO
+    from PIL import Image
+    
+    try:
+        from image_generator import generate_product_image, generate_master_svg_for_product
+        
+        products = get_products()
+        if not products:
+            return jsonify({"error": "No products found"}), 400
+        
+        # Create ZIP in memory
+        zip_buffer = BytesIO()
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for product in products:
+                m_number = product['m_number']
+                
+                # Format folder name
+                SIZE_DISPLAY = {'dracula': 'Dracula', 'saville': 'Saville', 'dick': 'Dick', 'barzan': 'Barzan', 'baby_jesus': 'Baby_Jesus'}
+                COLOR_DISPLAY = {'silver': 'Silver', 'gold': 'Gold', 'white': 'White'}
+                
+                mounting_type = product.get('mounting_type', 'self_adhesive')
+                mounting_display = "Self Adhesive" if mounting_type == "self_adhesive" else "Pre-Drilled"
+                color_display = COLOR_DISPLAY.get(product.get('color', 'silver').lower(), product.get('color', 'Silver').title())
+                size_display = SIZE_DISPLAY.get(product.get('size', 'saville').lower(), product.get('size', 'Saville').title())
+                description = product.get('description', 'Sign')
+                
+                folder_name = f"{m_number} {mounting_display} {description} aluminium sign {color_display} {size_display}"
+                
+                # Create folder structure (empty folders represented by placeholder)
+                subfolders = [
+                    '000 Archive',
+                    '001 Design/000 Archive',
+                    '001 Design/001 MASTER FILE',
+                    '001 Design/002 MUTOH',
+                    '001 Design/003 MIMAKI',
+                    '001 Design/004 ROLAND',
+                    '001 Design/005 IMAGE GENERATION',
+                    '001 Design/006 HULK',
+                    '001 Design/007 EPSON',
+                    '001 Design/008 ROLF',
+                    '002 Images',
+                    '003 Blanks',
+                    '004 SOPs',
+                ]
+                
+                # Add empty .gitkeep files to preserve folder structure
+                for subfolder in subfolders:
+                    zf.writestr(f"{folder_name}/{subfolder}/.gitkeep", "")
+                
+                # Generate and add images
+                IMAGE_TYPES = [
+                    ("main", "001"),
+                    ("dimensions", "002"),
+                    ("peel_and_stick", "003"),
+                    ("rear", "004"),
+                ]
+                
+                for img_type, img_num in IMAGE_TYPES:
+                    try:
+                        png_bytes = generate_product_image(product, img_type)
+                        
+                        # Add PNG
+                        zf.writestr(f"{folder_name}/002 Images/{m_number} - {img_num}.png", png_bytes)
+                        
+                        # Convert to JPEG and add
+                        img = Image.open(BytesIO(png_bytes))
+                        if img.mode == 'RGBA':
+                            bg = Image.new('RGB', img.size, (255, 255, 255))
+                            bg.paste(img, mask=img.split()[3])
+                            img = bg
+                        else:
+                            img = img.convert('RGB')
+                        
+                        jpg_buffer = BytesIO()
+                        img.save(jpg_buffer, 'JPEG', quality=85)
+                        zf.writestr(f"{folder_name}/002 Images/{m_number} - {img_num}.jpg", jpg_buffer.getvalue())
+                        
+                    except Exception as img_err:
+                        logging.warning(f"Failed to generate {img_type} for {m_number}: {img_err}")
+                
+                # Generate and add master SVG
+                try:
+                    master_svg = generate_master_svg_for_product(product)
+                    svg_bytes = master_svg.encode('utf-8') if isinstance(master_svg, str) else master_svg
+                    zf.writestr(f"{folder_name}/001 Design/001 MASTER FILE/{m_number} MASTER FILE.svg", svg_bytes)
+                except Exception as svg_err:
+                    logging.warning(f"Failed to generate master SVG for {m_number}: {svg_err}")
+        
+        zip_buffer.seek(0)
+        
+        # Generate filename with date
+        from datetime import datetime
+        date_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"M_Number_Folders_{date_str}.zip"
+        
+        return Response(
+            zip_buffer.getvalue(),
+            mimetype='application/zip',
+            headers={
+                'Content-Disposition': f'attachment; filename="{filename}"',
+                'Content-Length': str(len(zip_buffer.getvalue()))
+            }
+        )
+        
+    except Exception as e:
+        logging.error(f"ZIP generation error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/upload-to-gdrive-stream', methods=['POST'])
