@@ -4527,8 +4527,9 @@ def upload_images_to_r2():
     
     logging.info(f"Starting R2 upload for {len(products)} products")
     
-    # Google Drive M Number folders location
+    # Google Drive M Number folders location (only available locally)
     GDRIVE_EXPORTS_PATH = Path(r"G:\My Drive\001 NBNE\001 M")
+    save_to_gdrive = GDRIVE_EXPORTS_PATH.exists()
     
     # Image types: 001=main, 002=dimensions, 003=peel_and_stick, 004=rear
     IMAGE_TYPES = [
@@ -4583,51 +4584,52 @@ def upload_images_to_r2():
                 total_uploaded += 1
                 logging.info(f"Uploaded {r2_key}")
                 
-                # Also save to Google Drive M Number folder with proper structure
-                try:
-                    description = product.get('description', 'Sign')
-                    color = product.get('color', 'silver').lower()
-                    size = product.get('size', 'saville').lower()
-                    mounting = product.get('mounting_type', 'self_adhesive')
-                    
-                    # Format display names
-                    SIZE_DISPLAY = {'dracula': 'Dracula', 'saville': 'Saville', 'dick': 'Dick', 'barzan': 'Barzan', 'baby_jesus': 'Baby_Jesus'}
-                    COLOR_DISPLAY = {'silver': 'Silver', 'gold': 'Gold', 'white': 'White'}
-                    mounting_display = "Self Adhesive" if mounting == "self_adhesive" else "Pre-Drilled"
-                    color_display = COLOR_DISPLAY.get(color, color.title())
-                    size_display = SIZE_DISPLAY.get(size, size.title())
-                    
-                    folder_name = f"{m_number} {mounting_display} {description} aluminium sign {color_display} {size_display}"
-                    folder_path = GDRIVE_EXPORTS_PATH / folder_name
-                    
-                    # Create proper directory structure
-                    (folder_path / "000 Archive").mkdir(parents=True, exist_ok=True)
-                    (folder_path / "001 Design" / "000 Archive").mkdir(parents=True, exist_ok=True)
-                    (folder_path / "001 Design" / "001 MASTER FILE").mkdir(parents=True, exist_ok=True)
-                    (folder_path / "001 Design" / "002 MUTOH").mkdir(parents=True, exist_ok=True)
-                    (folder_path / "001 Design" / "003 MIMAKI").mkdir(parents=True, exist_ok=True)
-                    (folder_path / "001 Design" / "004 ROLAND").mkdir(parents=True, exist_ok=True)
-                    (folder_path / "001 Design" / "005 IMAGE GENERATION").mkdir(parents=True, exist_ok=True)
-                    (folder_path / "001 Design" / "006 HULK").mkdir(parents=True, exist_ok=True)
-                    (folder_path / "001 Design" / "007 EPSON").mkdir(parents=True, exist_ok=True)
-                    (folder_path / "001 Design" / "008 ROLF").mkdir(parents=True, exist_ok=True)
-                    (folder_path / "002 Images").mkdir(parents=True, exist_ok=True)
-                    (folder_path / "003 Blanks").mkdir(parents=True, exist_ok=True)
-                    (folder_path / "004 SOPs").mkdir(parents=True, exist_ok=True)
-                    
-                    # Save the JPEG to 002 Images
-                    img_path = folder_path / "002 Images" / f"{m_number} - {img_num}.jpg"
-                    with open(img_path, 'wb') as f:
-                        f.write(jpg_data)
-                    
-                    # Also save PNG to 002 Images
-                    png_path = folder_path / "002 Images" / f"{m_number} - {img_num}.png"
-                    with open(png_path, 'wb') as f:
-                        f.write(png_bytes)
-                    
-                    total_saved_gdrive += 1
-                except Exception as gdrive_err:
-                    logging.warning(f"Failed to save {r2_key} to Google Drive: {gdrive_err}")
+                # Also save to Google Drive M Number folder with proper structure (only if available)
+                if save_to_gdrive:
+                    try:
+                        description = product.get('description', 'Sign')
+                        color = product.get('color', 'silver').lower()
+                        size = product.get('size', 'saville').lower()
+                        mounting = product.get('mounting_type', 'self_adhesive')
+                        
+                        # Format display names
+                        SIZE_DISPLAY = {'dracula': 'Dracula', 'saville': 'Saville', 'dick': 'Dick', 'barzan': 'Barzan', 'baby_jesus': 'Baby_Jesus'}
+                        COLOR_DISPLAY = {'silver': 'Silver', 'gold': 'Gold', 'white': 'White'}
+                        mounting_display = "Self Adhesive" if mounting == "self_adhesive" else "Pre-Drilled"
+                        color_display = COLOR_DISPLAY.get(color, color.title())
+                        size_display = SIZE_DISPLAY.get(size, size.title())
+                        
+                        folder_name = f"{m_number} {mounting_display} {description} aluminium sign {color_display} {size_display}"
+                        folder_path = GDRIVE_EXPORTS_PATH / folder_name
+                        
+                        # Create proper directory structure
+                        (folder_path / "000 Archive").mkdir(parents=True, exist_ok=True)
+                        (folder_path / "001 Design" / "000 Archive").mkdir(parents=True, exist_ok=True)
+                        (folder_path / "001 Design" / "001 MASTER FILE").mkdir(parents=True, exist_ok=True)
+                        (folder_path / "001 Design" / "002 MUTOH").mkdir(parents=True, exist_ok=True)
+                        (folder_path / "001 Design" / "003 MIMAKI").mkdir(parents=True, exist_ok=True)
+                        (folder_path / "001 Design" / "004 ROLAND").mkdir(parents=True, exist_ok=True)
+                        (folder_path / "001 Design" / "005 IMAGE GENERATION").mkdir(parents=True, exist_ok=True)
+                        (folder_path / "001 Design" / "006 HULK").mkdir(parents=True, exist_ok=True)
+                        (folder_path / "001 Design" / "007 EPSON").mkdir(parents=True, exist_ok=True)
+                        (folder_path / "001 Design" / "008 ROLF").mkdir(parents=True, exist_ok=True)
+                        (folder_path / "002 Images").mkdir(parents=True, exist_ok=True)
+                        (folder_path / "003 Blanks").mkdir(parents=True, exist_ok=True)
+                        (folder_path / "004 SOPs").mkdir(parents=True, exist_ok=True)
+                        
+                        # Save the JPEG to 002 Images
+                        img_path = folder_path / "002 Images" / f"{m_number} - {img_num}.jpg"
+                        with open(img_path, 'wb') as f:
+                            f.write(jpg_data)
+                        
+                        # Also save PNG to 002 Images
+                        png_path = folder_path / "002 Images" / f"{m_number} - {img_num}.png"
+                        with open(png_path, 'wb') as f:
+                            f.write(png_bytes)
+                        
+                        total_saved_gdrive += 1
+                    except Exception as gdrive_err:
+                        logging.warning(f"Failed to save {r2_key} to Google Drive: {gdrive_err}")
                 
             except Exception as e:
                 import traceback
@@ -4635,30 +4637,31 @@ def upload_images_to_r2():
                 errors.append(error_msg)
                 logging.error(f"{error_msg}\n{traceback.format_exc()}")
         
-        # Generate and save Master SVG file for this product
-        try:
-            from image_generator import generate_master_svg_for_product
-            description = product.get('description', 'Sign')
-            color = product.get('color', 'silver').lower()
-            size = product.get('size', 'saville').lower()
-            mounting = product.get('mounting_type', 'self_adhesive')
-            
-            SIZE_DISPLAY = {'dracula': 'Dracula', 'saville': 'Saville', 'dick': 'Dick', 'barzan': 'Barzan', 'baby_jesus': 'Baby_Jesus'}
-            COLOR_DISPLAY = {'silver': 'Silver', 'gold': 'Gold', 'white': 'White'}
-            mounting_display = "Self Adhesive" if mounting == "self_adhesive" else "Pre-Drilled"
-            color_display = COLOR_DISPLAY.get(color, color.title())
-            size_display = SIZE_DISPLAY.get(size, size.title())
-            
-            folder_name = f"{m_number} {mounting_display} {description} aluminium sign {color_display} {size_display}"
-            folder_path = GDRIVE_EXPORTS_PATH / folder_name
-            
-            master_svg = generate_master_svg_for_product(product)
-            svg_path = folder_path / "001 Design" / "001 MASTER FILE" / f"{m_number} MASTER FILE.svg"
-            with open(svg_path, 'w', encoding='utf-8') as f:
-                f.write(master_svg)
-            logging.info(f"Saved master SVG for {m_number}")
-        except Exception as svg_err:
-            logging.warning(f"Failed to generate master SVG for {m_number}: {svg_err}")
+        # Generate and save Master SVG file for this product (only if Google Drive available)
+        if save_to_gdrive:
+            try:
+                from image_generator import generate_master_svg_for_product
+                description = product.get('description', 'Sign')
+                color = product.get('color', 'silver').lower()
+                size = product.get('size', 'saville').lower()
+                mounting = product.get('mounting_type', 'self_adhesive')
+                
+                SIZE_DISPLAY = {'dracula': 'Dracula', 'saville': 'Saville', 'dick': 'Dick', 'barzan': 'Barzan', 'baby_jesus': 'Baby_Jesus'}
+                COLOR_DISPLAY = {'silver': 'Silver', 'gold': 'Gold', 'white': 'White'}
+                mounting_display = "Self Adhesive" if mounting == "self_adhesive" else "Pre-Drilled"
+                color_display = COLOR_DISPLAY.get(color, color.title())
+                size_display = SIZE_DISPLAY.get(size, size.title())
+                
+                folder_name = f"{m_number} {mounting_display} {description} aluminium sign {color_display} {size_display}"
+                folder_path = GDRIVE_EXPORTS_PATH / folder_name
+                
+                master_svg = generate_master_svg_for_product(product)
+                svg_path = folder_path / "001 Design" / "001 MASTER FILE" / f"{m_number} MASTER FILE.svg"
+                with open(svg_path, 'w', encoding='utf-8') as f:
+                    f.write(master_svg)
+                logging.info(f"Saved master SVG for {m_number}")
+            except Exception as svg_err:
+                logging.warning(f"Failed to generate master SVG for {m_number}: {svg_err}")
         
         results.append(product_results)
     
