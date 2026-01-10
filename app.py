@@ -4845,5 +4845,61 @@ def update_product_position(m_number):
     return jsonify({"success": True, "updates": updates})
 
 
+@app.route('/api/debug/playwright')
+@login_required
+def debug_playwright():
+    """Test if Playwright is working."""
+    import logging
+    import traceback
+    
+    result = {"playwright_import": False, "browser_launch": False, "render_test": False, "errors": []}
+    
+    # Test 1: Import playwright
+    try:
+        from playwright.sync_api import sync_playwright
+        result["playwright_import"] = True
+    except Exception as e:
+        result["errors"].append(f"Import failed: {e}")
+        return jsonify(result)
+    
+    # Test 2: Launch browser
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            result["browser_launch"] = True
+            
+            # Test 3: Render a simple page
+            try:
+                page = browser.new_page()
+                page.set_content("<html><body><h1>Test</h1></body></html>")
+                screenshot = page.screenshot()
+                result["render_test"] = True
+                result["screenshot_size"] = len(screenshot)
+                page.close()
+            except Exception as e:
+                result["errors"].append(f"Render failed: {e}\n{traceback.format_exc()}")
+            finally:
+                browser.close()
+    except Exception as e:
+        result["errors"].append(f"Browser launch failed: {e}\n{traceback.format_exc()}")
+    
+    return jsonify(result)
+
+
+@app.route('/api/debug/r2')
+@login_required  
+def debug_r2():
+    """Test R2 configuration."""
+    from config import R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL
+    
+    return jsonify({
+        "r2_account_id": R2_ACCOUNT_ID[:8] + "..." if R2_ACCOUNT_ID else None,
+        "r2_access_key_set": bool(R2_ACCESS_KEY_ID),
+        "r2_secret_key_set": bool(R2_SECRET_ACCESS_KEY),
+        "r2_bucket": R2_BUCKET_NAME,
+        "r2_public_url": R2_PUBLIC_URL
+    })
+
+
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
