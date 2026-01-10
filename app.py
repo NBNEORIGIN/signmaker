@@ -4971,6 +4971,21 @@ def upload_to_gdrive_stream():
                             'image/jpeg'
                         )
                     
+                    # Generate and upload master SVG to 001 MASTER FILE folder
+                    yield json.dumps({"type": "status", "message": f"Generating master SVG for {m_number}..."}) + "\n"
+                    try:
+                        from image_generator import generate_master_svg_for_product
+                        master_svg = generate_master_svg_for_product(product)
+                        svg_bytes = master_svg.encode('utf-8') if isinstance(master_svg, str) else master_svg
+                        gdrive_storage.upload_file(
+                            svg_bytes,
+                            f"{m_number} MASTER FILE.svg",
+                            folders['design_001_master'],
+                            'image/svg+xml'
+                        )
+                    except Exception as svg_err:
+                        logging.warning(f"Failed to generate master SVG for {m_number}: {svg_err}")
+                    
                     total_created += 1
                     yield json.dumps({"type": "progress", "current": i + 1, "m_number": m_number, "created": total_created}) + "\n"
                     
