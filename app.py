@@ -4755,8 +4755,9 @@ def upload_images_to_r2_stream():
                 m_number = product['m_number']
                 
                 try:
-                    # Generate main image only
-                    png_bytes = generate_product_image(product, "main")
+                    # Use preview function for faster rendering (scale=1)
+                    from image_generator import generate_product_image_preview
+                    png_bytes = generate_product_image_preview(product)
                     
                     # Convert to JPEG
                     img = Image.open(BytesIO(png_bytes))
@@ -4767,15 +4768,15 @@ def upload_images_to_r2_stream():
                     else:
                         img = img.convert('RGB')
                     
-                    # Resize if needed
-                    MAX_DIMENSION = 2000
+                    # Resize to 800px max for ecommerce (much faster)
+                    MAX_DIMENSION = 800
                     if img.width > MAX_DIMENSION or img.height > MAX_DIMENSION:
                         ratio = min(MAX_DIMENSION / img.width, MAX_DIMENSION / img.height)
                         new_size = (int(img.width * ratio), int(img.height * ratio))
                         img = img.resize(new_size, Image.LANCZOS)
                     
                     jpg_bytes = BytesIO()
-                    img.save(jpg_bytes, 'JPEG', quality=85)
+                    img.save(jpg_bytes, 'JPEG', quality=75)
                     jpg_bytes.seek(0)
                     
                     # Upload to R2
