@@ -1472,12 +1472,15 @@ HTML_TEMPLATE = '''
                                 progressText.innerHTML = `<span style="color: #666;">Creating ${data.m_number}... (${data.current}/${totalProducts})</span>`;
                             } else if (data.type === 'error') {
                                 errors.push(data.error);
+                                progressText.innerHTML = `<span style="color: red;">Error: ${data.error}</span>`;
                             } else if (data.type === 'complete') {
                                 progressBar.value = 100;
                                 let msg = `<span style="color: green;">✅ Created ${data.created} M Number folders on Google Drive</span>`;
                                 if (errors.length > 0) {
-                                    msg += `<br><span style="color: orange;">⚠️ ${errors.length} errors (see console)</span>`;
-                                    console.log('GDrive errors:', errors);
+                                    msg += `<br><span style="color: orange;">⚠️ ${errors.length} errors:</span><br>`;
+                                    msg += `<div style="max-height: 150px; overflow-y: auto; font-size: 11px; background: #fff3cd; padding: 5px; border-radius: 4px;">`;
+                                    errors.forEach(e => { msg += `<div style="color: #856404;">${e}</div>`; });
+                                    msg += `</div>`;
                                 }
                                 progressText.innerHTML = msg;
                             }
