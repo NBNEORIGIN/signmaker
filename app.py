@@ -4880,7 +4880,7 @@ def upload_to_gdrive_stream():
     
     def generate():
         try:
-            from image_generator import generate_product_image, generate_master_svg_for_product
+            from image_generator import generate_product_image_preview, generate_master_svg_for_product
             import gdrive_storage
             
             if not gdrive_storage.is_configured():
@@ -4918,8 +4918,8 @@ def upload_to_gdrive_stream():
                         parent_folder_id=parent_folder_id
                     )
                     
-                    # Generate and upload main image (PNG and JPEG)
-                    png_bytes = generate_product_image(product, "main")
+                    # Generate and upload main image (PNG and JPEG) - use preview for speed
+                    png_bytes = generate_product_image_preview(product)
                     
                     # Upload PNG
                     gdrive_storage.upload_file(
