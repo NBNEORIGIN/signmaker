@@ -1463,6 +1463,8 @@ HTML_TEMPLATE = '''
                             if (data.type === 'start') {
                                 totalProducts = data.total;
                                 progressText.textContent = `Creating folders for ${totalProducts} products...`;
+                            } else if (data.type === 'status') {
+                                progressText.innerHTML = `<span style="color: #666;">${data.message}</span>`;
                             } else if (data.type === 'progress') {
                                 totalCreated = data.created;
                                 const percent = Math.round((data.current / totalProducts) * 100);
@@ -4908,6 +4910,8 @@ def upload_to_gdrive_stream():
                 m_number = product['m_number']
                 
                 try:
+                    yield json.dumps({"type": "status", "message": f"Creating folders for {m_number}..."}) + "\n"
+                    
                     # Create folder structure
                     folders = gdrive_storage.create_m_number_folder_structure(
                         m_number=m_number,
@@ -4918,8 +4922,12 @@ def upload_to_gdrive_stream():
                         parent_folder_id=parent_folder_id
                     )
                     
+                    yield json.dumps({"type": "status", "message": f"Generating image for {m_number}..."}) + "\n"
+                    
                     # Generate and upload main image (PNG and JPEG) - use preview for speed
                     png_bytes = generate_product_image_preview(product)
+                    
+                    yield json.dumps({"type": "status", "message": f"Uploading PNG for {m_number}..."}) + "\n"
                     
                     # Upload PNG
                     gdrive_storage.upload_file(
